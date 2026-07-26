@@ -1,4 +1,4 @@
-from midscene_ui_agent.graph import WorkflowEngine
+from midscene_ui_agent.application.workflows.graph import WorkflowEngine
 
 def test_workflow_pauses_before_connection_for_approval(tmp_path):
     calls=[]; engine=WorkflowEngine(checkpoint_path=tmp_path/'c.json')

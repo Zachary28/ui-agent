@@ -1,4 +1,4 @@
-from midscene_ui_agent.runner import CommandRunner, CommandSpec
+from midscene_ui_agent.infrastructure.execution.runner import CommandRunner, CommandSpec
 
 def test_runner_decodes_non_utf8_output_without_crashing(tmp_path):
     spec=CommandSpec(["python","-c","import sys; sys.stdout.buffer.write(bytes([0xff]))"],cwd=str(tmp_path))

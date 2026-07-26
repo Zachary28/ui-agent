@@ -1,7 +1,7 @@
 from midscene_ui_agent import __version__
 import pytest
 from pydantic import ValidationError
-from midscene_ui_agent.contracts import AutomationRequest
+from midscene_ui_agent.domain.contracts import AutomationRequest
 
 
 def test_package_version_is_stable() -> None:

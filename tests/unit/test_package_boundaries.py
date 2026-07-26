@@ -1,7 +1,9 @@
-﻿def test_new_public_imports_and_legacy_facades_resolve_to_same_types():
-    from midscene_ui_agent.domain.contracts import AutomationRequest as NewRequest
-    from midscene_ui_agent.contracts import AutomationRequest as LegacyRequest
-    assert NewRequest is LegacyRequest
+﻿def test_canonical_imports_resolve_without_facades():
+    from midscene_ui_agent.domain.contracts import AutomationRequest, LoopPlan, AutomationResult
+    from midscene_ui_agent.interfaces.api import run
+    from midscene_ui_agent.infrastructure.execution.runner import CommandRunner, CommandSpec
+    assert AutomationRequest is not None
+    assert LoopPlan is not None
 
 def test_domain_does_not_import_platform_or_infrastructure_modules():
     import ast

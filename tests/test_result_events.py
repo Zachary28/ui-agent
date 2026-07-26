@@ -1,6 +1,6 @@
 import json
-from midscene_ui_agent.contracts import AutomationRequest
-from midscene_ui_agent.api import run
+from midscene_ui_agent.domain.contracts import AutomationRequest
+from midscene_ui_agent.interfaces.api import run
 
 def test_plan_run_writes_events_jsonl(tmp_path):
     q=AutomationRequest(platform="browser",target={"url":"http://x"},goal="inspect",report_dir=str(tmp_path))

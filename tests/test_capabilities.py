@@ -1,5 +1,5 @@
 from midscene_ui_agent.adapters.registry import default_registry
-from midscene_ui_agent.contracts import AutomationRequest
+from midscene_ui_agent.domain.contracts import AutomationRequest
 
 def test_all_platforms_build_required_core_commands():
     registry=default_registry(); targets={"browser":{"url":"http://x"},"computer":{},"android":{"device_id":"a"},"ios":{"wda_host":"127.0.0.1","wda_port":8100},"harmony":{"device_id":"h"}}

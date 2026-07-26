@@ -1,8 +1,8 @@
 from pathlib import Path
-from midscene_ui_agent.contracts import AutomationRequest
-from midscene_ui_agent.api import run
+from midscene_ui_agent.domain.contracts import AutomationRequest
+from midscene_ui_agent.interfaces.api import run
 from midscene_ui_agent.adapters.vitest_e2e import VitestE2EAdapter
-from midscene_ui_agent.reports import discover_native_report
+from midscene_ui_agent.infrastructure.reporting.reports import discover_native_report
 
 def test_plan_writes_manifest_and_result(tmp_path):
     result=run(AutomationRequest(platform="browser",target={"url":"http://example.test"},goal="inspect",report_dir=str(tmp_path)))
@@ -17,7 +17,7 @@ def test_live_commands_use_isolated_work_directory(tmp_path):
         def __init__(self): self.specs=[]
         def run(self,spec,**kwargs):
             self.specs.append(spec)
-            from midscene_ui_agent.runner import CommandResult
+            from midscene_ui_agent.infrastructure.execution.runner import CommandResult
             return CommandResult(spec.argv,0,"","" )
     fake=FakeRunner(); q=AutomationRequest(platform="android",target={"device_id":"x"},goal="screenshot",operation="screenshot",mode="live",report_dir=str(tmp_path))
     run(q,runner=fake)
@@ -31,12 +31,12 @@ def test_ui_operations_connect_before_action(tmp_path):
     class FakeRunner:
         def __init__(self): self.ops=[]
         def run(self,spec,**kwargs):
-            self.ops.append(spec.argv[3]); from midscene_ui_agent.runner import CommandResult; return CommandResult(spec.argv,0,"","")
+            self.ops.append(spec.argv[3]); from midscene_ui_agent.infrastructure.execution.runner import CommandResult; return CommandResult(spec.argv,0,"","")
     fake=FakeRunner(); q=AutomationRequest(platform="browser",target={"url":"http://x"},goal="inspect",operation="screenshot",mode="live",report_dir=str(tmp_path))
     run(q,runner=fake); assert fake.ops==["connect","take_screenshot"]
 
 def test_api_loads_model_environment_without_overriding(monkeypatch, tmp_path):
     env=tmp_path/".env"; env.write_text("MIDSCENE_MODEL_NAME=test-model\n",encoding="utf-8")
     monkeypatch.chdir(tmp_path); monkeypatch.delenv("MIDSCENE_MODEL_NAME",raising=False)
-    from midscene_ui_agent.api import _load_environment
+    from midscene_ui_agent.interfaces.api import _load_environment
     _load_environment(); assert __import__('os').environ["MIDSCENE_MODEL_NAME"]=="test-model"

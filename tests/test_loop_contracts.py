@@ -3,7 +3,7 @@ from pydantic import ValidationError
 
 
 def test_operation_inherits_global_interval_and_override():
-    from midscene_ui_agent.loop_contracts import LoopPlan
+    from midscene_ui_agent.domain.contracts.loop_contracts import LoopPlan
 
     plan = LoopPlan.model_validate({"operations": {"check_playback": {"enabled": True}}})
     assert plan.operations["check_playback"].interval_seconds == plan.defaults.interval_seconds
@@ -15,7 +15,7 @@ def test_operation_inherits_global_interval_and_override():
 
 
 def test_switch_requires_exit_target_and_rejects_unsafe_popup_prompt():
-    from midscene_ui_agent.loop_contracts import LoopPlan
+    from midscene_ui_agent.domain.contracts.loop_contracts import LoopPlan
 
     with pytest.raises(ValidationError):
         LoopPlan.model_validate({"operations": {"switch_episode": {"enabled": True}}})
@@ -24,7 +24,7 @@ def test_switch_requires_exit_target_and_rejects_unsafe_popup_prompt():
 
 
 def test_operation_interval_and_scroll_constraints():
-    from midscene_ui_agent.loop_contracts import LoopPlan
+    from midscene_ui_agent.domain.contracts.loop_contracts import LoopPlan
 
     with pytest.raises(ValidationError):
         LoopPlan.model_validate({"defaults": {"min_operation_interval_seconds": 5}, "operations": {"check_playback": {"interval_seconds": 4}}})
@@ -34,7 +34,7 @@ def test_operation_interval_and_scroll_constraints():
 
 
 def test_automation_request_accepts_optional_loop():
-    from midscene_ui_agent.contracts import AutomationRequest
+    from midscene_ui_agent.domain.contracts import AutomationRequest
 
     request = AutomationRequest.model_validate({"platform": "browser", "target": {"url": "https://example.test"}, "goal": "watch"})
     assert request.loop is None

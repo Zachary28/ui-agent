@@ -27,8 +27,8 @@ def test_loop_controller_cancel_is_clean(tmp_path):
 
 
 def test_api_routes_loop_request_to_controller(tmp_path):
-    from midscene_ui_agent.api import run
-    from midscene_ui_agent.contracts import AutomationRequest
+    from midscene_ui_agent.interfaces.api import run
+    from midscene_ui_agent.domain.contracts import AutomationRequest
     request = AutomationRequest.model_validate({
         "platform": "android", "target": {"device_id": "fake"}, "goal": "watch",
         "mode": "live", "report_dir": str(tmp_path),
