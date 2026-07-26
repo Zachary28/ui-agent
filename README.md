@@ -17,7 +17,7 @@ Copy-Item .env.example .env
 
 ## 使用
 
-默认 `plan` 模式只生成计划；执行真实操作时使用 `--mode live`，高风险操作需要人工审批。
+默认 `plan` 模式只生成计划；执行真实操作时使用 `--mode live`。
 
 ```powershell
 midscene-ui-agent run --platform browser --url https://example.com --goal "verify the page is loaded"
