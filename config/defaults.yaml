@@ -1,0 +1,14 @@
+schema_version: 1
+loop:
+  defaults:
+    interval_seconds: 5
+    min_operation_interval_seconds: 1
+    timeout_seconds: 30
+    max_attempts: 3
+    evidence: true
+  operations:
+    dismiss_popup: {enabled: true, interval_seconds: 2, priority: 100}
+    skip_ad: {enabled: true, interval_seconds: 1, priority: 90}
+    check_playback: {enabled: true, interval_seconds: 5, priority: 60}
+credentials:
+  model_api_key_env: MIDSCENE_MODEL_API_KEY

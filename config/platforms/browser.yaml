@@ -1,0 +1,4 @@
+schema_version: 1
+platform: browser
+extends: ../defaults.yaml
+capabilities: [puppeteer, cdp, screenshot]

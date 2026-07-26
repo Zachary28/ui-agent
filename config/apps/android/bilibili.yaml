@@ -1,0 +1,12 @@
+schema_version: 1
+id: android.bilibili
+platform: android
+extends: ../../platforms/android.yaml
+app:
+  name: Bilibili
+  package_name: tv.danmaku.bili
+  launch_uri: tv.danmaku.bili
+ui:
+  free_markers: [免费观看, 免费]
+  popup_prompts: [关闭普通弹窗，不要登录、购买或提交数据]
+  ad_prompts: [点击跳过广告或关闭广告]

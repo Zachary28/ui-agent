@@ -1,0 +1,1 @@
+{"type":"object","additionalProperties":false,"required":["id","platform"],"properties":{"id":{"type":"string"},"platform":{"type":"string"},"credentials":{"type":"object","additionalProperties":false}}}

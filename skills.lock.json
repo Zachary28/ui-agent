@@ -1,0 +1,58 @@
+{
+  "browser": {
+    "files": [
+      {
+        "relative_path": "browser/SKILL.md",
+        "sha256": "3808231c521f2d5c210f63b4e313db329fa15d3af00914e4f998cf4dba420baf"
+      }
+    ]
+  },
+  "computer": {
+    "files": [
+      {
+        "relative_path": "computer-automation/SKILL.md",
+        "sha256": "094de1fe35bfb64ca3d9ad3ef6e8f72d726302c394c531d8f67cdc54738c241f"
+      }
+    ]
+  },
+  "android": {
+    "files": [
+      {
+        "relative_path": "android-automation/SKILL.md",
+        "sha256": "fd6775b5862f0a44f4b9c5f5e5016fd889e693a789042fdb779724bd160780db"
+      }
+    ]
+  },
+  "ios": {
+    "files": [
+      {
+        "relative_path": "ios-automation/SKILL.md",
+        "sha256": "9d5378edcd4acf321c847fc8500f2c310631bac1eafee62bca07666e02edf492"
+      }
+    ]
+  },
+  "harmony": {
+    "files": [
+      {
+        "relative_path": "harmony-automation/SKILL.md",
+        "sha256": "937b0a7cc3b5fb65ad123a4c0816a863b9162c9f3a0110a9202ec380ed9b3f33"
+      }
+    ]
+  },
+  "vitest_e2e": {
+    "files": [
+      {
+        "relative_path": "vitest-midscene-e2e/SKILL.md",
+        "sha256": "1530e7f739848ed77b9ce4b0cea5333c135c2d9413a652f387b83ca7eeeffe3f"
+      },
+      {
+        "relative_path": "vitest-midscene-e2e/references/troubleshooting.md",
+        "sha256": "5dc97fcc54c6b860cdf7829de0f42b4a5f8f0473cf36841c975ab519917b2c9f"
+      },
+      {
+        "relative_path": "vitest-midscene-e2e/scripts/clone-boilerplate.sh",
+        "sha256": "9b9220cea4d8e14d30ca72ff820dd5c2a5e576e3e068787df541c46bd995c6bf"
+      }
+    ]
+  }
+}

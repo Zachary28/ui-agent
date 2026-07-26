@@ -1,0 +1,5 @@
+schema_version: 1
+profile: android.tencent-video
+loop:
+  operations:
+    switch_episode: {enabled: true, interval_seconds: 120, strategy: free_only}

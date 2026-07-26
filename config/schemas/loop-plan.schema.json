@@ -1,0 +1,1 @@
+{"type":"object","additionalProperties":false,"properties":{"enabled":{"type":"boolean"},"defaults":{"type":"object"},"operations":{"type":"object"},"exit_conditions":{"type":"object"}}}

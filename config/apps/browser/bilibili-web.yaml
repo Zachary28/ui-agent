@@ -1,0 +1,7 @@
+schema_version: 1
+id: browser.bilibili-web
+platform: browser
+extends: ../../platforms/browser.yaml
+app:
+  name: Bilibili Web
+  url: https://www.bilibili.com

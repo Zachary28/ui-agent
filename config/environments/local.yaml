@@ -1,0 +1,3 @@
+schema_version: 1
+name: local
+artifacts_dir: ./artifacts

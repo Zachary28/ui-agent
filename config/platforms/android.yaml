@@ -1,0 +1,4 @@
+schema_version: 1
+platform: android
+extends: ../defaults.yaml
+capabilities: [adb, screenshot, launch]

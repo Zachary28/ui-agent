@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+
+# Env
+.env
+
+# Artifacts
+artifacts/
+midscene_run/
+
+# OS
+.DS_Store
+Thumbs.db
