@@ -1,13 +1,11 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 import json, uuid, os
 from dataclasses import replace
 from pathlib import Path
 from ...domain.contracts import AutomationRequest, AutomationResult, Artifact, StepResult
-from ...domain.policies.safety import requires_approval
 from ...infrastructure.execution.runner import CommandRunner
 from ...platforms.registry import default_registry
 from ...infrastructure.reporting.reports import write_result, build_manifest, discover_native_report, convert_native_report
-from ..services.approval import write_pending, validate_pending
 from ...domain.errors import UiAgentError
 from ...infrastructure.evidence.events import Event
 from ...infrastructure.persistence.checkpoint import SqliteCheckpoint
@@ -27,7 +25,7 @@ def _load_environment() -> None:
         key,value=raw.split("=",1); value=value.strip().strip('"').strip("'")
         if key.strip() and key.strip() not in os.environ: os.environ[key.strip()]=value
 
-def run(request: AutomationRequest, *, runner: CommandRunner | None = None, adapters=None, approve: bool = False, resume: bool = False) -> AutomationResult:
+def run(request: AutomationRequest, *, runner: CommandRunner | None = None, adapters=None, resume: bool = False) -> AutomationResult:
     _load_environment()
     run_id=request.run_id or uuid.uuid4().hex; root=Path(request.report_dir)/run_id; root.mkdir(parents=True,exist_ok=True); (root/"work").mkdir(exist_ok=True)
     checkpoint=SqliteCheckpoint(Path(request.report_dir)/"checkpoints.sqlite")
@@ -37,10 +35,6 @@ def run(request: AutomationRequest, *, runner: CommandRunner | None = None, adap
         (root/"plan.json").write_text(json.dumps(plan,indent=2),encoding="utf-8")
         _event(root,run_id,"plan",request.goal)
         result=AutomationResult(run_id=run_id,status="planned",artifacts=[Artifact(kind="plan",path="plan.json")]); checkpoint.put(run_id,result.model_dump()); write_result(result,root); build_manifest(result,request,root); checkpoint.close(); return result
-    if requires_approval(request.platform,request.target,request.goal,request.operation,request.mode):
-        request=request.model_copy(update={"run_id":run_id})
-        if not approve or not (resume and validate_pending(root,request)):
-            write_pending(root,request); result=AutomationResult(run_id=run_id,status="needs_confirmation"); checkpoint.put(run_id,result.model_dump()); write_result(result,root); build_manifest(result,request,root); checkpoint.close(); return result
     adapter=(adapters or default_registry())[request.platform]; command_runner=runner or CommandRunner(Path(request.report_dir)); steps=[]
     if request.loop is not None:
         loop_result = LoopWorkflow(adapter).run(request.loop, artifact_root=root)

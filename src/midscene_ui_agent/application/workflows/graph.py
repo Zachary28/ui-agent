@@ -1,4 +1,4 @@
-from .planner import PhasePlanner
+﻿from .planner import PhasePlanner
 from ...domain.runtime.state import RunState
 from ...infrastructure.persistence.checkpoint import DurableWorkflow
 from pathlib import Path
@@ -17,15 +17,7 @@ class WorkflowEngine:
     """Serializable lifecycle router used by API and as a LangGraph-compatible node core."""
     def __init__(self, checkpoint_path="artifacts/checkpoints.json"):
         self.checkpoint=JsonCheckpoint(Path(checkpoint_path))
-    def run(self, run_id, *, approval_required=False, approved=False, cancelled=False, connect=None):
-        if cancelled:
-            state={"run_id":run_id,"status":"cancelled"}; self.checkpoint.put(run_id,state); return state
-        if approval_required and not approved:
-            state={"run_id":run_id,"status":"needs_confirmation","interrupt_reason":"approval"}; self.checkpoint.put(run_id,state); return state
-        if approved:
-            previous=self.checkpoint.get(run_id)
-            if not previous or previous.get("status")!="needs_confirmation":
-                state={"run_id":run_id,"status":"resume_invalid"}; self.checkpoint.put(run_id,state); return state
+    def run(self, run_id, *, connect=None):
         if connect: connect()
         state={"run_id":run_id,"status":"succeeded"}; self.checkpoint.put(run_id,state); return state
 class AgentGraph:
