@@ -1,0 +1,59 @@
+﻿@startuml
+!theme plain
+skinparam defaultFontSize 13
+
+title 单次任务执行 - 时序图
+
+actor "用户" as user
+participant "CLI (Typer)" as cli
+participant "Orchestrator" as orch
+participant "PlatformAdapter" as adapter
+participant "CommandRunner" as runner
+participant "Midscene CLI\n(npx @midscene/...)" as midscene
+participant "Checkpoint\n(SQLite)" as ckpt
+participant "Reports" as reports
+
+== 启动 ==
+user -> cli : midscene-ui-agent run\n--platform browser --url ...
+cli -> orch : run(AutomationRequest)
+orch -> orch : _load_environment()\n加载 .env 配置
+
+orch -> ckpt : put(run_id, status=running)
+activate ckpt
+deactivate ckpt
+
+== Plan 模式 (默认) ==
+opt mode == "plan"
+  orch -> orch : 生成 plan.json
+  orch -> ckpt : put(run_id, status=planned)
+  orch -> reports : write_result()
+  orch --> cli : AutomationResult(status=planned)
+  deactivate orch
+  cli --> user : 执行计划已生成
+end
+
+== Live 模式 - 真实执行 ==
+opt mode == "live"
+  orch -> orch : 构建操作序列\n[connect, health_check, run, screenshot]
+  
+  loop 每个操作
+    orch -> adapter : command(request, operation)
+    adapter --> orch : CommandSpec(argv, cwd)
+    orch -> runner : run(CommandSpec)
+    runner -> midscene : npx -y @midscene/web@1 ...
+    activate midscene
+    midscene --> runner : stdout + returncode
+    deactivate midscene
+    runner --> orch : CommandResult
+    orch -> orch : 记录步骤结果
+  end
+
+  orch -> reports : write_result()\nbuild_manifest()
+  orch -> reports : discover_native_report()\nconvert (HTML -> Markdown)
+  orch -> ckpt : put(run_id, final_result)
+  orch --> cli : AutomationResult(status=succeeded|failed)
+  deactivate orch
+  cli --> user : 结果 + 报告路径
+end
+
+@enduml

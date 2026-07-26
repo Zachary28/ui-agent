@@ -1,0 +1,55 @@
+﻿@startuml
+!theme plain
+skinparam defaultFontSize 13
+
+title 配置分层与叠加
+
+package "Layer 1: 全局默认" as L1 #E8F5E9 {
+  file "defaults.yaml" as def {
+    "interval_seconds: 5\noperations:\n  dismiss_popup:\n    enabled: true\n    interval: 2"
+  }
+}
+
+package "Layer 2: 平台" as L2 #FFF3E0 {
+  file "platforms/android.yaml" as plat {
+    "extends: defaults\noperations:\n  dismiss_popup:\n    interval: 3\n  launch_app: {enabled: true}"
+  }
+  file "platforms/browser.yaml" as bplat #E3F2FD {
+    "url: https://...\nheadless: false"
+  }
+}
+
+package "Layer 3: 应用 Profile" as L3 #F3E5F5 {
+  file "apps/android/bilibili.yaml" as bili {
+    "extends: ../../platforms/android.yaml\napp:\n  package_name: tv.danmaku.bili\nui:\n  free_markers: [免费观看]"
+  }
+  file "apps/android/tencent-video.yaml" as tx {
+    "extends: ../../platforms/android.yaml\napp:\n  package_name: com.tencent.qqlive"
+  }
+}
+
+package "Layer 4: 任务" as L4 #FCE4EC {
+  file "tasks/watch-bilibili.yaml" as task {
+    "extends: ../../apps/android/bilibili.yaml\nloop:\n  operations:\n    switch_episode: {enabled: true}"
+  }
+}
+
+package "Layer 5: CLI/API 覆盖" as L5 #E1F5FE {
+  [--override "loop.max_runtime=3600"] as cli
+}
+
+L1 --> L2 : 叠加
+L2 --> L3 : 叠加
+L3 --> L4 : 叠加
+L4 --> L5 : 最终覆盖
+
+note right of L5
+  <b>合并结果示例</b>
+  interval_seconds: 5 (默认)
+  dismiss_popup.interval: 3 (平台覆盖)
+  package_name: tv.danmaku.bili (app)
+  switch_episode.enabled: true (task)
+  max_runtime: 3600 (CLI 覆盖)
+end note
+
+@enduml

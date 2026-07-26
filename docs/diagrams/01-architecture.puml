@@ -1,0 +1,97 @@
+﻿@startuml
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 13
+
+title Midscene UI Agent - 系统架构图
+
+package "Interfaces 接口层" as interfaces #E8F5E9 {
+  [CLI (Typer)] as cli
+  [API (Python)] as api
+}
+
+package "Application 应用层" as app #F3E5F5 {
+  package "Workflows 工作流" as wf {
+    [Orchestrator] as orch
+    [Graph Engine] as graph
+  }
+  package "Services 服务" as svc {
+    [SkillCatalog] as skills
+    [Operation Handlers] as handlers
+  }
+  package "Loop 循环引擎" as loop #FFF3E0 {
+    [LoopWorkflow] as loopwf
+    [LoopScheduler] as sched
+    [OperationSelector] as selector
+  }
+}
+
+package "Domain 领域层" as domain #E3F2FD {
+  [Contracts\n(AutomationRequest, LoopPlan, ...)] as contracts
+  [RuntimeState] as state
+  [ExitPolicy] as exitp
+  [classify_risk] as safety
+}
+
+package "Infrastructure 基础设施层" as infra #FCE4EC {
+  package "Execution" as exec {
+    [CommandRunner] as runner
+  }
+  package "Reporting" as rep {
+    [Reports &\nManifest] as reports
+  }
+  package "Checkpoint" as ck {
+    [SqliteCheckpoint] as sqlite
+    [JsonCheckpoint] as jsonck
+  }
+  package "Evidence" as ev {
+    [Events &\nRedaction] as events
+  }
+}
+
+package "Platforms 平台适配层" as plat #FFF9C4 {
+  [Browser] as browser
+  [Computer (RDP)] as computer
+  [Android (ADB)] as android
+  [iOS (WDA)] as ios
+  [Harmony OS (HDC)] as harmony
+  [Vitest E2E] as vitest
+  [PlatformRegistry] as registry
+}
+
+cloud "MIDSCENE CLI" as midscene #ECEFF1 {
+  [@midscene/web@1]
+  [@midscene/android@1]
+  [@midscene/computer@1]
+  [@midscene/ios@1]
+  [@midscene/harmony@1]
+}
+
+package "Config 配置" as config #E1F5FE {
+  file "defaults.yaml" as defconf
+  file "platforms/\n*.yaml" as platconf
+  file "apps/<app>.yaml" as appconf
+  file "tasks/<task>.yaml" as taskconf
+}
+
+' Dependencies
+interfaces --> app : 调用
+app --> domain : 依赖
+app --> infra : 使用
+app --> plat : 路由
+plat --> infra : 使用
+plat --> midscene : npx 命令
+loop --> handlers : 调度
+handlers --> domain : 使用
+app ..> config : 加载配置
+
+' Config hierarchy
+defconf --> platconf : 叠加
+platconf --> appconf : 叠加
+appconf --> taskconf : 叠加
+
+' Flow
+cli --> orch : run(request)
+api --> orch : run(request)
+
+@enduml
