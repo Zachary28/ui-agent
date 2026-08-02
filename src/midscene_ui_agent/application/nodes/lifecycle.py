@@ -8,6 +8,10 @@ def prepare_run(state: AutomationGraphState) -> dict[str, str]:
     return {"phase": "prepare_run", "status": state.get("status", "running")}
 
 
+def verify_skill_lock(state: AutomationGraphState) -> dict[str, str]:
+    return {"phase": "verify_skill_lock", "status": state.get("status", "running")}
+
+
 def execute_route(state: AutomationGraphState) -> dict[str, str]:
     return {"phase": "execute_route", "status": state.get("status", "running")}
 
@@ -20,4 +24,4 @@ def finalize_run(state: AutomationGraphState) -> dict[str, str]:
     }
 
 
-__all__ = ["prepare_run", "execute_route", "finalize_run"]
+__all__ = ["prepare_run", "verify_skill_lock", "execute_route", "finalize_run"]

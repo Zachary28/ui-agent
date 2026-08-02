@@ -31,8 +31,16 @@ class SkillCatalog:
     def verify_lock(self, path, strict=True):
         data=json.loads(Path(path).read_text(encoding="utf-8"))
         for key in self.paths:
-            found={x["relative_path"]:x["sha256"] for x in data.get(key,{}).get("files",[])}
-            for f in self.files(key):
-                actual=hashlib.sha256((self.root/f).read_bytes()).hexdigest()
-                if found.get(f)!=actual: raise UiAgentError(ErrorCode.SKILL_NOT_FOUND, f"skill lock mismatch: {f}")
+            self._verify_platform_data(data, key)
         return True
+    def verify_platform_lock(self, path, platform):
+        data=json.loads(Path(path).read_text(encoding="utf-8"))
+        self._verify_platform_data(data, platform)
+        return True
+    def _verify_platform_data(self, data, platform):
+        found={x["relative_path"]:x["sha256"] for x in data.get(platform,{}).get("files",[])}
+        for f in self.files(platform):
+            skill_file=self.root/f
+            if not skill_file.is_file(): raise UiAgentError(ErrorCode.SKILL_NOT_FOUND, str(skill_file))
+            actual=hashlib.sha256(skill_file.read_bytes()).hexdigest()
+            if found.get(f)!=actual: raise UiAgentError(ErrorCode.SKILL_NOT_FOUND, f"skill lock mismatch: {f}")

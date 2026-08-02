@@ -1,12 +1,13 @@
 ﻿from __future__ import annotations
 import json, uuid
+import os
 from functools import partial
 from pathlib import Path
-from ...domain.contracts import AutomationRequest, AutomationResult, Artifact, ExitReason, RunFingerprints, StepResult
+from ...domain.contracts import AutomationRequest, AutomationResult, Artifact, ExitReason, RunFingerprints
 from ...domain.policies.resume import ResumeInvalid, validate_resume
 from ...infrastructure.execution.runner import CommandRunner
 from ...platforms.registry import default_registry
-from ...infrastructure.reporting.reports import write_result, build_manifest, discover_native_report, convert_native_report
+from ...infrastructure.reporting.reports import write_result, build_manifest
 from ...infrastructure.evidence.events import Event
 from ...infrastructure.persistence.checkpoint import SqliteCheckpoint
 from ..loop.controller import LoopWorkflow
@@ -16,6 +17,10 @@ from ..nodes.execution import execute_operation_step
 from ...infrastructure.persistence.langgraph import sqlite_checkpointer
 from ...infrastructure.config.resolver import ConfigResolver
 from ...infrastructure.config.resources import default_skill_lock_path
+from ..services.skills import SkillCatalog
+from ..nodes.lifecycle import finalize_run
+from ...platforms.base import ExecutionContext
+from ..nodes.reporting import finalize_graph_reports
 
 
 def _request_fingerprints(request: AutomationRequest) -> RunFingerprints:
@@ -45,6 +50,8 @@ def run(
     adapters=None,
     resume: bool = False,
     fingerprints: RunFingerprints | None = None,
+    skills_root: str | Path | None = None,
+    skills_lock: str | Path | None = None,
 ) -> AutomationResult:
     run_id=request.run_id or uuid.uuid4().hex; root=Path(request.report_dir)/run_id; root.mkdir(parents=True,exist_ok=True); (root/"work").mkdir(exist_ok=True)
     checkpoint=SqliteCheckpoint(Path(request.report_dir)/"checkpoints.sqlite")
@@ -55,6 +62,66 @@ def run(
         _event(root,run_id,"plan",request.goal)
         result=AutomationResult(run_id=run_id,status="planned",artifacts=[Artifact(kind="plan",path="plan.json")]); checkpoint.put(run_id,result.model_dump()); write_result(result,root); build_manifest(result,request,root); checkpoint.close(); return result
     effective_fingerprints = fingerprints or _request_fingerprints(request)
+    resolved_skills_root = Path(skills_root) if skills_root is not None else Path(os.environ["MIDSCENE_SKILLS_ROOT"]) if os.environ.get("MIDSCENE_SKILLS_ROOT") else None
+    resolved_skills_lock = Path(skills_lock) if skills_lock is not None else default_skill_lock_path() if resolved_skills_root is not None else None
+
+    def verify_skills(state):
+        del state
+        if resolved_skills_lock is not None and resolved_skills_root is None:
+            return {"phase": "verify_skill_lock", "status": "failed", "error": "skills root is required when a skill lock is supplied"}
+        if resolved_skills_root is None:
+            return {"phase": "verify_skill_lock", "status": "running"}
+        try:
+            SkillCatalog(resolved_skills_root).verify_platform_lock(resolved_skills_lock, request.platform)
+        except Exception as exc:
+            return {"phase": "verify_skill_lock", "status": "failed", "error": str(exc)}
+        return {"phase": "verify_skill_lock", "status": "running"}
+
+    def finalize_graph(state):
+        updates = dict(finalize_run(state))
+        secondary = list(state.get("secondary_errors", []))
+        exit_conditions = request.loop.exit_conditions if request.loop is not None else None
+        should_release = (
+            bool(exit_conditions.close_browser_on_exit) if request.platform == "browser" and exit_conditions
+            else False if request.platform == "browser"
+            else bool(exit_conditions.disconnect_on_exit) if exit_conditions
+            else True
+        )
+        if state.get("phase") == "verify_skill_lock" and state.get("error"):
+            should_release = False
+        if not should_release or not hasattr(adapter, "release"):
+            updates.update(release_attempted=False, resources_released=False, secondary_errors=secondary)
+        else:
+            updates["release_attempted"] = True
+            try:
+                outcome = adapter.release(
+                    ExecutionContext(
+                        request=request,
+                        runner=command_runner,
+                        run_id=run_id,
+                        event_id="finalize:release",
+                        cwd=root / "work",
+                        timeout_seconds=request.timeout_seconds,
+                    )
+                )
+                updates["resources_released"] = bool(outcome.succeeded)
+                if not outcome.succeeded:
+                    secondary.append(f"RESOURCE_RELEASE_FAILED: {outcome.message}")
+            except Exception as exc:
+                updates["resources_released"] = False
+                secondary.append(f"RESOURCE_RELEASE_FAILED: {exc}")
+            updates["secondary_errors"] = secondary
+        combined = {**state, **updates}
+        updates.update(
+            finalize_graph_reports(
+                combined,
+                request=request,
+                root=root,
+                runner=command_runner,
+                fingerprints=effective_fingerprints.model_dump(mode="json"),
+            )
+        )
+        return updates
     adapter=(adapters or default_registry())[request.platform]; command_runner=runner or CommandRunner(Path(request.report_dir)); steps=[]
     loop_workflow = None
     if request.loop is not None:
@@ -79,7 +146,11 @@ def run(
         execution_graph=build_single_operation_graph(executor=execute_step, inherit_checkpointer=True)
         route = "single"
     with sqlite_checkpointer(Path(request.report_dir)/"langgraph.sqlite") as graph_checkpointer:
-        graph=build_automation_graph(execution_graph=execution_graph,checkpointer=graph_checkpointer)
+        graph=build_automation_graph(
+            execution_graph=execution_graph,
+            services={"verify": verify_skills, "finalize": finalize_graph},
+            checkpointer=graph_checkpointer,
+        )
         graph_input = {
             "run_id":run_id,
             "thread_id":run_id,
@@ -111,34 +182,21 @@ def run(
                 )
                 checkpoint.put(run_id, final.model_dump())
                 write_result(final, root)
-                build_manifest(final, request, root)
+                build_manifest(
+                    final,
+                    request,
+                    root,
+                    thread_id=run_id,
+                    fingerprints=effective_fingerprints.model_dump(mode="json"),
+                    graph_phase="finalize_run",
+                )
                 checkpoint.close()
                 return final
             graph_state=graph.invoke(None, config=graph_config)
         else:
+            graph_checkpointer.saver.delete_thread(run_id)
             graph_state=graph.invoke(graph_input, config=graph_config)
-    if request.loop is not None:
-        loop_result = loop_workflow.result_from_state(graph_state)
-        final = AutomationResult(
-            run_id=run_id,
-            status="cancelled" if loop_result.status == "cancelled" else "succeeded",
-            loop_summary=loop_result.loop_summary,
-            exit_reason=loop_result.exit_reason,
-        )
-        checkpoint.put(run_id, final.model_dump()); write_result(final, root); build_manifest(final, request, root); checkpoint.close()
-        return final
-    steps=[StepResult.model_validate(step) for step in graph_state.get("steps",[])]
-    status=graph_state.get("status","failed")
-    artifacts=[]; secondary=[]; native=discover_native_report(root/"work")
-    if native:
-        artifacts.append(Artifact(kind="report",path=str(native.relative_to(root))))
-        packages={"browser":"@midscene/web@1","computer":"@midscene/computer@1","android":"@midscene/android@1","ios":"@midscene/ios@1","harmony":"@midscene/harmony@1"}
-        if request.platform in packages and request.operation not in {"init","convert","create","update"}:
-            try:
-                converted=convert_native_report(packages[request.platform],native,root/"report",command_runner,run_id=run_id)
-                for path in converted:
-                    if path.is_file(): artifacts.append(Artifact(kind="report",path=str(path.relative_to(root))))
-            except Exception as exc:
-                secondary.append(f"REPORT_GENERATION_FAILED: {exc}")
-    error=next((s.message for s in steps if s.status=="failed"),None)
-    final=AutomationResult(run_id=run_id,status=status,steps=steps,artifacts=artifacts,error=error,secondary_errors=secondary); checkpoint.put(run_id,final.model_dump()); write_result(final,root); build_manifest(final,request,root); checkpoint.close(); return final
+    final = AutomationResult.model_validate(graph_state["result_payload"])
+    checkpoint.put(run_id, final.model_dump())
+    checkpoint.close()
+    return final

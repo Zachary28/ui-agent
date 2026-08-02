@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event
@@ -10,6 +11,7 @@ from typing import Any
 from ...domain.contracts import AutomationRequest, ExitReason, LoopPlan
 from ...infrastructure.execution.runner import CommandRunner
 from ...platforms.base import ExecutionContext
+from ...infrastructure.evidence.collector import EvidenceCollector
 from ..graphs.loop import LoopGraphServices, build_loop_graph
 from ..services.handlers import (
     AdHandler,
@@ -48,6 +50,7 @@ class LoopWorkflow:
         self.checkpointer = checkpointer
         self.cancel_event = Event()
         self._artifact_root = Path(".")
+        self._evidence_payload: dict[str, Any] = {}
 
     def cancel(self) -> None:
         self.cancel_event.set()
@@ -79,6 +82,7 @@ class LoopWorkflow:
                 observe=self._observe,
                 execute=self._execute,
                 verify_effect=self._verify_effect,
+                record_evidence=self._record_evidence,
             ),
             checkpointer=self.checkpointer,
             inherit_checkpointer=inherit_checkpointer,
@@ -128,7 +132,7 @@ class LoopWorkflow:
 
     def _execute(self, operation: str, timeout: float, attempt: int, state) -> dict[str, Any]:
         del attempt
-        context = self._context(operation, timeout) if self.request is not None else None
+        context = self._context(operation, timeout) if self.request is not None and hasattr(self.adapter, "command") else None
         plan = LoopPlan.model_validate(state["plan"])
         if operation == "dismiss_popup":
             prompt = plan.popup_prompts[0] if plan and plan.popup_prompts else "Close the ordinary popup"
@@ -172,6 +176,32 @@ class LoopWorkflow:
         config = self.request.loop.operations.get(operation) if self.request.loop else None
         timeout = config.timeout_seconds if config and config.timeout_seconds else self.request.timeout_seconds
         return bool(self.adapter.verify_effect(operation, operation_id, self._context(operation, timeout)))
+
+    def _record_evidence(self, operation: str, operation_id: str, phase: str, payload, state) -> list[str]:
+        plan = LoopPlan.model_validate(state["plan"])
+        if not plan.defaults.evidence:
+            return []
+        self._evidence_payload = {
+            "operation": operation,
+            "operation_id": operation_id,
+            "phase": phase,
+            "payload": dict(payload),
+            "tick": state.get("tick", 0),
+        }
+
+        def write_snapshot(captured_operation, captured_phase, path):
+            del captured_operation, captured_phase
+            path.write_text(json.dumps(self._evidence_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            return True
+
+        collector = EvidenceCollector(
+            self._artifact_root / "evidence",
+            capture=write_snapshot,
+            extension=".json",
+        )
+        capture = collector.capture_before if phase == "before" else collector.capture_after
+        ref = capture(operation, operation_id=operation_id)
+        return [ref] if ref else []
 
 
 __all__ = ["LoopResult", "LoopWorkflow"]

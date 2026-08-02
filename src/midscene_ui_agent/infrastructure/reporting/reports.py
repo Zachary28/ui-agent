@@ -5,13 +5,19 @@ from ...domain.contracts import AutomationResult, Artifact
 from ..execution.runner import CommandRunner, CommandSpec
 def write_result(result: AutomationResult, root: str | Path) -> Path:
     root=Path(root); root.mkdir(parents=True,exist_ok=True); path=root/"result.json"; path.write_text(result.model_dump_json(indent=2),encoding="utf-8"); return path
-def build_manifest(result: AutomationResult, request, root: str | Path) -> Path:
+def build_manifest(result: AutomationResult, request, root: str | Path, *, thread_id=None, fingerprints=None, graph_phase=None) -> Path:
     root=Path(root); manifest=root/"manifest.json"
     payload={"run_id":result.run_id,"platform":request.platform,"status":result.status,"artifacts":[a.model_dump() for a in result.artifacts]}
     if result.loop_summary is not None:
         payload["loop_summary"] = result.loop_summary
     if result.exit_reason is not None:
         payload["exit_reason"] = result.exit_reason
+    if thread_id is not None:
+        payload["thread_id"] = thread_id
+    if fingerprints is not None:
+        payload["fingerprints"] = fingerprints
+    if graph_phase is not None:
+        payload["graph_phase"] = graph_phase
     manifest.write_text(json.dumps(payload,indent=2),encoding="utf-8"); return manifest
 
 def discover_native_report(work: str | Path) -> Path | None:

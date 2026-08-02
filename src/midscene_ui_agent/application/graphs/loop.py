@@ -25,7 +25,7 @@ class LoopGraphServices:
     observe: Callable[[LoopGraphState], Mapping[str, Any]]
     execute: Callable[[str, float, int, LoopGraphState], Mapping[str, Any]]
     verify_effect: Callable[[str, str, LoopGraphState], bool] | None = None
-    record_evidence: Callable[[str, Mapping[str, Any], LoopGraphState], list[str]] | None = None
+    record_evidence: Callable[[str, str, str, Mapping[str, Any], LoopGraphState], list[str]] | None = None
 
 
 def _runtime_state(state: LoopGraphState, plan: LoopPlan) -> RuntimeState:
@@ -163,11 +163,24 @@ def build_loop_graph(
             "operation_messages": messages,
         }
 
-    def record_evidence(state: LoopGraphState) -> dict[str, Any]:
+    def record_evidence(phase: str, state: LoopGraphState) -> dict[str, Any]:
         if services.record_evidence is None or not state.get("selected_operation"):
             return {}
-        refs = services.record_evidence(state["selected_operation"], state.get("last_outcome", {}), state)
+        payload = state.get("observation", {}) if phase == "before" else state.get("last_outcome", {})
+        refs = services.record_evidence(
+            state["selected_operation"],
+            str(state.get("operation_id", "")),
+            phase,
+            payload,
+            state,
+        )
         return {"evidence_refs": [*state.get("evidence_refs", []), *refs]}
+
+    def record_before_evidence(state: LoopGraphState) -> dict[str, Any]:
+        return record_evidence("before", state)
+
+    def record_after_evidence(state: LoopGraphState) -> dict[str, Any]:
+        return record_evidence("after", state)
 
     def evaluate_exit(state: LoopGraphState) -> dict[str, Any]:
         plan = LoopPlan.model_validate(state["plan"])
@@ -289,14 +302,16 @@ def build_loop_graph(
     builder.add_node("schedule_operations", schedule_operations)
     builder.add_node("select_operation", select_operation)
     builder.add_node("execute_operation", execute_operation)
-    builder.add_node("record_evidence", record_evidence)
+    builder.add_node("record_before_evidence", record_before_evidence)
+    builder.add_node("record_evidence", record_after_evidence)
     builder.add_node("evaluate_exit", evaluate_exit)
     builder.add_node("summarize_loop", summarize_loop)
     builder.add_edge(START, "initialize_loop")
     builder.add_edge("initialize_loop", "observe_ui")
     builder.add_edge("observe_ui", "schedule_operations")
     builder.add_edge("schedule_operations", "select_operation")
-    builder.add_conditional_edges("select_operation", route_after_select, {"execute": "execute_operation", "evaluate": "evaluate_exit"})
+    builder.add_conditional_edges("select_operation", route_after_select, {"execute": "record_before_evidence", "evaluate": "evaluate_exit"})
+    builder.add_edge("record_before_evidence", "execute_operation")
     builder.add_edge("execute_operation", "record_evidence")
     builder.add_edge("record_evidence", "evaluate_exit")
     builder.add_conditional_edges(

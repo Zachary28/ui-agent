@@ -45,6 +45,7 @@ class LoopStateFields(TypedDict, total=False):
     device_unreachable: bool
     model_error: bool
     evidence_refs: list[str]
+    current_operation_id: str | None
     observation: JsonObject
     last_outcome: JsonObject
     last_operation: str | None
@@ -83,6 +84,7 @@ class AutomationGraphState(LoopStateFields, total=False):
     result_path: str
     manifest_path: str
     events_path: str
+    result_payload: JsonObject
 
 
 __all__ = [

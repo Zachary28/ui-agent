@@ -34,6 +34,8 @@ def run(
     adapters=None,
     resume: bool = False,
     fingerprints: RunFingerprints | None = None,
+    skills_root: str | Path | None = None,
+    skills_lock: str | Path | None = None,
 ) -> AutomationResult:
     _load_environment()
     return run_workflow(
@@ -42,6 +44,8 @@ def run(
         adapters=adapters,
         resume=resume,
         fingerprints=fingerprints,
+        skills_root=skills_root,
+        skills_lock=skills_lock,
     )
 
 __all__ = ["run"]

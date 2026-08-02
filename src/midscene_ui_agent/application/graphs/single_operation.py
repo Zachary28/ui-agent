@@ -10,6 +10,7 @@ from ...domain.runtime.graph import AutomationGraphState, JsonObject
 from ...infrastructure.persistence.langgraph import CheckpointerHandle
 
 StepExecutor = Callable[[AutomationGraphState, str], Mapping[str, Any]]
+EvidenceCapture = Callable[[str, str, str, AutomationGraphState], str | None]
 
 
 def operation_steps(operation: str) -> list[str]:
@@ -25,6 +26,7 @@ def build_single_operation_graph(
     executor: StepExecutor,
     checkpointer: CheckpointerHandle | None = None,
     inherit_checkpointer: bool = False,
+    capture_evidence: EvidenceCapture | None = None,
 ):
     if checkpointer is not None and inherit_checkpointer:
         raise ValueError("checkpointer and inherit_checkpointer cannot both be supplied")
@@ -39,6 +41,7 @@ def build_single_operation_graph(
             "error": state.get("error") if resume else None,
             "phase": "prepare_operation",
             "status": "running",
+            "evidence_refs": list(state.get("evidence_refs", [])) if resume else [],
         }
         if not resume:
             updates.update(
@@ -54,6 +57,23 @@ def build_single_operation_graph(
                 events_path="",
             )
         return updates
+
+    def capture(phase: str, state: AutomationGraphState) -> dict[str, Any]:
+        index = int(state.get("step_index", 0))
+        operation = state["operation_steps"][index]
+        operation_id = f"step-{index}:{operation}"
+        updates: dict[str, Any] = {"current_operation_id": operation_id}
+        if capture_evidence is not None:
+            ref = capture_evidence(operation, operation_id, phase, state)
+            if ref:
+                updates["evidence_refs"] = [*state.get("evidence_refs", []), ref]
+        return updates
+
+    def capture_before(state: AutomationGraphState) -> dict[str, Any]:
+        return capture("before", state)
+
+    def capture_after(state: AutomationGraphState) -> dict[str, Any]:
+        return capture("after", {**state, "step_index": max(0, int(state.get("step_index", 1)) - 1)})
 
     def execute_step(state: AutomationGraphState) -> dict[str, Any]:
         index = state.get("step_index", 0)
@@ -85,18 +105,22 @@ def build_single_operation_graph(
 
     builder = StateGraph(AutomationGraphState)
     builder.add_node("prepare_operation", prepare)
+    builder.add_node("capture_before", capture_before)
     builder.add_node("execute_step", execute_step)
+    builder.add_node("capture_after", capture_after)
     builder.add_node("finish_operation", finish)
     builder.add_edge(START, "prepare_operation")
     builder.add_conditional_edges(
-        "prepare_operation", route, {"execute": "execute_step", "finish": "finish_operation"}
+        "prepare_operation", route, {"execute": "capture_before", "finish": "finish_operation"}
     )
+    builder.add_edge("capture_before", "execute_step")
+    builder.add_edge("execute_step", "capture_after")
     builder.add_conditional_edges(
-        "execute_step", route, {"execute": "execute_step", "finish": "finish_operation"}
+        "capture_after", route, {"execute": "capture_before", "finish": "finish_operation"}
     )
     builder.add_edge("finish_operation", END)
     saver = True if inherit_checkpointer else checkpointer.saver if checkpointer is not None else None
     return builder.compile(checkpointer=saver)
 
 
-__all__ = ["StepExecutor", "operation_steps", "build_single_operation_graph"]
+__all__ = ["StepExecutor", "EvidenceCapture", "operation_steps", "build_single_operation_graph"]

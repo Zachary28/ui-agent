@@ -8,7 +8,7 @@ from langgraph.graph import END, START, StateGraph
 
 from ...domain.runtime.graph import AutomationGraphState
 from ...infrastructure.persistence.langgraph import CheckpointerHandle
-from ..nodes.lifecycle import execute_route, finalize_run, prepare_run
+from ..nodes.lifecycle import execute_route, finalize_run, prepare_run, verify_skill_lock
 
 GraphNode = Callable[[AutomationGraphState], Mapping[str, Any]]
 
@@ -21,6 +21,7 @@ def build_automation_graph(
 ):
     nodes: dict[str, Any] = {
         "prepare": prepare_run,
+        "verify": verify_skill_lock,
         "execute": execution_graph or execute_route,
         "finalize": finalize_run,
     }
@@ -34,10 +35,16 @@ def build_automation_graph(
 
     builder = StateGraph(AutomationGraphState)
     builder.add_node("prepare_run", nodes["prepare"])
+    builder.add_node("verify_skill_lock", nodes["verify"])
     builder.add_node("execute_route", nodes["execute"])
     builder.add_node("finalize_run", nodes["finalize"])
     builder.add_edge(START, "prepare_run")
-    builder.add_edge("prepare_run", "execute_route")
+    builder.add_edge("prepare_run", "verify_skill_lock")
+    builder.add_conditional_edges(
+        "verify_skill_lock",
+        lambda state: "finalize" if state.get("error") or state.get("status") == "failed" else "execute",
+        {"execute": "execute_route", "finalize": "finalize_run"},
+    )
     builder.add_edge("execute_route", "finalize_run")
     builder.add_edge("finalize_run", END)
     return builder.compile(checkpointer=checkpointer.saver)
