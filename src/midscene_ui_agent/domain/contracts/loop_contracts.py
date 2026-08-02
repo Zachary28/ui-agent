@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .runtime import ExitReason
+from .runtime_types import ExitReason
 
 
 OperationName = Literal[

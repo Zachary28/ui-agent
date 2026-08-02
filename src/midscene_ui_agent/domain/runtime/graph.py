@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import TypeAlias, TypedDict
 
+from ..contracts.runtime_types import ExitReason
+
 
 JsonScalar: TypeAlias = str | int | float | bool | None
 JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
@@ -25,7 +27,7 @@ class AutomationGraphState(TypedDict, total=False):
     error: str | None
     secondary_errors: list[str]
     status: str
-    exit_reason: str | None
+    exit_reason: ExitReason | None
     release_attempted: bool
     resources_released: bool
     resource_release_state: JsonObject
@@ -64,7 +66,7 @@ class LoopGraphState(TypedDict, total=False):
     device_unreachable: bool
     model_error: bool
     evidence_refs: list[str]
-    exit_reason: str | None
+    exit_reason: ExitReason | None
     cancelled: bool
 
 

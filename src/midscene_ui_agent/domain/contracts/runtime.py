@@ -1,35 +1,20 @@
 """Runtime configuration and normalized exit contracts."""
 from __future__ import annotations
 
-from enum import StrEnum
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic_core import PydanticSerializationError
 
-from pydantic import BaseModel, ConfigDict
-
-class ExitReason(StrEnum):
-    COMPLETED = "completed"
-    MAX_RUNTIME = "max_runtime"
-    MAX_SWITCHES = "max_switches"
-    MAX_SCROLLS = "max_scrolls"
-    TARGET_COUNT = "target_count"
-    MAX_FAILURES = "max_failures"
-    NO_PROGRESS = "no_progress"
-    DEVICE_UNREACHABLE = "device_unreachable"
-    MODEL_ERROR = "model_error"
-    LOGIN_REQUIRED = "login_required"
-    PURCHASE_REQUIRED = "purchase_required"
-    UNHANDLED_POPUP = "unhandled_popup"
-    CANCELLED = "cancelled"
-    RESUME_INVALID = "resume_invalid"
+from .runtime_types import ExitReason
 
 
 class RunFingerprints(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    config_hash: str
-    profile_hash: str
-    loop_plan_hash: str
-    skill_lock_hash: str
-    target_fingerprint: str
+    config_hash: str = Field(min_length=1)
+    profile_hash: str = Field(min_length=1)
+    loop_plan_hash: str = Field(min_length=1)
+    skill_lock_hash: str = Field(min_length=1)
+    target_fingerprint: str = Field(min_length=1)
 
 
 # Imported after the independent contracts above so this module and
@@ -42,6 +27,14 @@ class ResolvedRunConfig(BaseModel):
 
     request: AutomationRequest
     fingerprints: RunFingerprints
+
+    @model_validator(mode="after")
+    def request_is_json_serializable(self) -> "ResolvedRunConfig":
+        try:
+            self.request.model_dump_json()
+        except PydanticSerializationError as exc:
+            raise ValueError("resolved request must be JSON-serializable") from exc
+        return self
 
 
 __all__ = ["ExitReason", "RunFingerprints", "ResolvedRunConfig"]

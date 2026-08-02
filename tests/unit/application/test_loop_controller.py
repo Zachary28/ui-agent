@@ -13,7 +13,7 @@ def test_loop_controller_runs_ticks_until_runtime_limit(tmp_path):
     from midscene_ui_agent.domain.runtime.loop import RuntimeState
     plan = LoopPlan.model_validate({"defaults": {"interval_seconds": 1}, "exit_conditions": {"max_runtime_seconds": 0.01}, "operations": {"check_playback": {"enabled": True, "interval_seconds": 1}}})
     result = LoopWorkflow(FakeAdapter()).run(plan, artifact_root=tmp_path)
-    assert result.exit_reason == "MAX_RUNTIME"
+    assert result.exit_reason == "max_runtime"
     assert result.loop_summary["ticks"] >= 1
 
 
@@ -23,7 +23,7 @@ def test_loop_controller_cancel_is_clean(tmp_path):
     workflow = LoopWorkflow(FakeAdapter())
     workflow.cancel()
     result = workflow.run(LoopPlan.model_validate({"exit_conditions": {"max_runtime_seconds": 1}, "operations": {"screenshot": {"enabled": True}}}), artifact_root=tmp_path)
-    assert result.exit_reason == "CANCELLED"
+    assert result.exit_reason == "cancelled"
 
 
 def test_api_routes_loop_request_to_controller(tmp_path):
@@ -35,4 +35,4 @@ def test_api_routes_loop_request_to_controller(tmp_path):
         "loop": {"exit_conditions": {"max_runtime_seconds": 0.01}, "operations": {"check_playback": {"enabled": True}}},
     })
     result = run(request, adapters={"android": FakeAdapter()})
-    assert result.exit_reason == "MAX_RUNTIME"
+    assert result.exit_reason == "max_runtime"

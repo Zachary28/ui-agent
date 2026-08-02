@@ -5,6 +5,8 @@ import re
 from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .runtime_types import ExitReason
+
 Platform = Literal["browser", "computer", "android", "ios", "harmony", "vitest_e2e"]
 Operation = Literal["run", "connect", "health_check", "screenshot", "assert", "launch", "raw", "tap_locate", "list_displays", "report", "disconnect", "close", "debug", "convert", "create", "update", "init"]
 
@@ -143,7 +145,7 @@ class AutomationResult(BaseModel):
     error: str | None = None
     secondary_errors: list[str] = Field(default_factory=list)
     loop_summary: dict[str, Any] | None = None
-    exit_reason: str | None = None
+    exit_reason: ExitReason | None = None
 
 
 # Import after the request model is declared to avoid a circular import when

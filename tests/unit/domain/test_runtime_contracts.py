@@ -1,4 +1,5 @@
 import json
+import importlib
 
 import pytest
 from pydantic import ValidationError
@@ -42,6 +43,11 @@ def test_runtime_result_supports_resume_invalid() -> None:
     assert result.exit_reason == ExitReason.RESUME_INVALID
 
 
+def test_runtime_result_rejects_unknown_exit_reason() -> None:
+    with pytest.raises(ValidationError):
+        AutomationResult(run_id="r1", status="failed", exit_reason="totally_invalid")
+
+
 def test_exit_reason_has_the_public_runtime_values() -> None:
     assert {reason.value for reason in ExitReason} == {
         "completed",
@@ -66,6 +72,17 @@ def test_fingerprints_require_all_runtime_hashes() -> None:
         RunFingerprints(config_hash="a", profile_hash="b")
 
 
+def test_fingerprints_reject_empty_runtime_hashes() -> None:
+    with pytest.raises(ValidationError):
+        RunFingerprints(
+            config_hash="",
+            profile_hash="",
+            loop_plan_hash="",
+            skill_lock_hash="",
+            target_fingerprint="",
+        )
+
+
 def test_fingerprints_are_frozen() -> None:
     fingerprints = _fingerprints()
 
@@ -85,6 +102,32 @@ def test_resolved_run_config_contains_validated_request_and_fingerprints() -> No
 
     assert isinstance(config.request, AutomationRequest)
     assert config.fingerprints.target_fingerprint == "target"
+
+
+def test_resolved_run_config_rejects_non_json_request_values() -> None:
+    with pytest.raises(ValidationError, match="JSON-serializable"):
+        ResolvedRunConfig(
+            request={
+                "platform": "browser",
+                "target": {"url": "https://example.test"},
+                "goal": "inspect",
+                "variables": {"bad": object()},
+            },
+            fingerprints=_fingerprints(),
+        )
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    [
+        "midscene_ui_agent.domain.contracts.contracts",
+        "midscene_ui_agent.domain.contracts.loop_contracts",
+        "midscene_ui_agent.domain.contracts.runtime",
+        "midscene_ui_agent.domain.runtime.graph",
+    ],
+)
+def test_public_contract_modules_import_independently(module_name: str) -> None:
+    assert importlib.import_module(module_name)
 
 
 def test_graph_states_have_json_serializable_checkpoint_shapes() -> None:

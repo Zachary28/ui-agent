@@ -5,6 +5,7 @@ from pathlib import Path
 from threading import Event
 
 from ...domain.contracts import LoopPlan
+from ...domain.contracts.runtime_types import ExitReason
 from ...domain.policies.exit import ExitPolicy
 from ...domain.runtime.loop import RuntimeState
 from .scheduler import LoopScheduler
@@ -58,7 +59,7 @@ class LoopWorkflow:
             else:
                 if self.cancel_event.wait(0.01):
                     state.cancelled = True
-        return type("LoopResult", (), {"status": "cancelled" if exit_reason == "CANCELLED" else "succeeded", "exit_reason": exit_reason, "loop_summary": {"ticks": state.current_tick, "elapsed_seconds": state.elapsed_seconds, "operations": operations}})()
+        return type("LoopResult", (), {"status": "cancelled" if exit_reason == ExitReason.CANCELLED else "succeeded", "exit_reason": exit_reason, "loop_summary": {"ticks": state.current_tick, "elapsed_seconds": state.elapsed_seconds, "operations": operations}})()
 
     def _execute(self, operation: str, plan: LoopPlan):
         if operation == "dismiss_popup":
