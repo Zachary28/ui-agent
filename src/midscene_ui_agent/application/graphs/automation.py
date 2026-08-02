@@ -16,14 +16,17 @@ GraphNode = Callable[[AutomationGraphState], Mapping[str, Any]]
 def build_automation_graph(
     *,
     services: Mapping[str, GraphNode] | None = None,
+    execution_graph: Any | None = None,
     checkpointer: CheckpointerHandle,
 ):
-    nodes: dict[str, GraphNode] = {
+    nodes: dict[str, Any] = {
         "prepare": prepare_run,
-        "execute": execute_route,
+        "execute": execution_graph or execute_route,
         "finalize": finalize_run,
     }
     if services:
+        if execution_graph is not None and "execute" in services:
+            raise ValueError("execution_graph and execute service cannot both be supplied")
         unknown = set(services) - set(nodes)
         if unknown:
             raise ValueError(f"unknown automation graph services: {sorted(unknown)}")

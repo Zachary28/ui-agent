@@ -136,7 +136,7 @@ def test_graph_states_have_json_serializable_checkpoint_shapes() -> None:
         "thread_id": "r1",
         "request": {"platform": "browser", "goal": "inspect"},
         "config": {"request": {"goal": "inspect"}},
-        "operation_steps": [{"operation": "run"}],
+        "operation_steps": ["run"],
         "steps": [{"phase": "execute", "status": "succeeded"}],
         "artifacts": [{"kind": "report", "path": "result.json"}],
         "fingerprints": _fingerprints().model_dump(mode="json"),

@@ -1,32 +1,23 @@
 ﻿from __future__ import annotations
-import json, uuid, os
-from dataclasses import replace
+import json, uuid
+from functools import partial
 from pathlib import Path
 from ...domain.contracts import AutomationRequest, AutomationResult, Artifact, StepResult
 from ...infrastructure.execution.runner import CommandRunner
 from ...platforms.registry import default_registry
 from ...infrastructure.reporting.reports import write_result, build_manifest, discover_native_report, convert_native_report
-from ...domain.errors import UiAgentError
 from ...infrastructure.evidence.events import Event
 from ...infrastructure.persistence.checkpoint import SqliteCheckpoint
 from ..loop.controller import LoopWorkflow
+from ..graphs.automation import build_automation_graph
+from ..graphs.single_operation import build_single_operation_graph
+from ..nodes.execution import execute_operation_step
+from ...infrastructure.persistence.langgraph import sqlite_checkpointer
 
 def _event(root: Path, run_id: str, kind: str, message: str) -> None:
     Event(kind=kind,message=message,run_id=run_id).write(root/"events.jsonl")
 
-def _load_environment() -> None:
-    """Load .env, falling back to the documented example for local setup."""
-    path=Path(".env")
-    if not path.exists(): path=Path(".env.example")
-    if not path.exists(): return
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        raw=raw.strip()
-        if not raw or raw.startswith("#") or "=" not in raw: continue
-        key,value=raw.split("=",1); value=value.strip().strip('"').strip("'")
-        if key.strip() and key.strip() not in os.environ: os.environ[key.strip()]=value
-
 def run(request: AutomationRequest, *, runner: CommandRunner | None = None, adapters=None, resume: bool = False) -> AutomationResult:
-    _load_environment()
     run_id=request.run_id or uuid.uuid4().hex; root=Path(request.report_dir)/run_id; root.mkdir(parents=True,exist_ok=True); (root/"work").mkdir(exist_ok=True)
     checkpoint=SqliteCheckpoint(Path(request.report_dir)/"checkpoints.sqlite")
     checkpoint.put(run_id,{"status":"running","platform":request.platform,"operation":request.operation})
@@ -46,25 +37,24 @@ def run(request: AutomationRequest, *, runner: CommandRunner | None = None, adap
         )
         checkpoint.put(run_id, final.model_dump()); write_result(final, root); build_manifest(final, request, root); checkpoint.close()
         return final
-    if request.platform == "vitest_e2e" and request.operation in {"create", "update"}:
-        if request.operation == "create": adapter.create(request.target.project_dir, request.case_name or request.test_name or "ui-agent-case", request.goal)
-        else: adapter.update_case(request.target.project_dir, request.test_name or request.case_name or "", request.goal)
-    if request.operation == "run":
-        operations=["connect","health_check","run","screenshot"]
-    elif request.operation in {"screenshot","assert","launch","tap_locate"}:
-        operations=["connect",request.operation]
-    else:
-        operations=[request.operation]
-    for operation in operations:
-        try:
-            spec=adapter.command(request, operation)
-            spec=replace(spec, cwd=str(root/"work"))
-            result=command_runner.run(spec,run_id=run_id,event_id=operation)
-        except UiAgentError as exc:
-            message=f"{exc.code}: {exc}"; steps.append(StepResult(phase=operation,status="failed",message=message)); _event(root,run_id,"error",message); break
-        message=result.stderr or result.stdout; step_status="succeeded" if result.returncode==0 else "failed"; steps.append(StepResult(phase=operation,status=step_status,message=message)); _event(root,run_id,operation,message)
-        if result.returncode: break
-    status="succeeded" if all(s.status=="succeeded" for s in steps) else "failed"
+    execute_step=partial(
+        execute_operation_step,
+        adapter=adapter,
+        request=request,
+        runner=command_runner,
+        run_id=run_id,
+        work_dir=root/"work",
+        write_event=partial(_event,root,run_id),
+    )
+    single_graph=build_single_operation_graph(executor=execute_step)
+    with sqlite_checkpointer(Path(request.report_dir)/"langgraph.sqlite") as graph_checkpointer:
+        graph=build_automation_graph(execution_graph=single_graph,checkpointer=graph_checkpointer)
+        graph_state=graph.invoke(
+            {"run_id":run_id,"thread_id":run_id,"request":request.model_dump(mode="json"),"mode":request.mode,"route":"single","resume":resume},
+            config={"configurable":{"thread_id":run_id}},
+        )
+    steps=[StepResult.model_validate(step) for step in graph_state.get("steps",[])]
+    status=graph_state.get("status","failed")
     artifacts=[]; secondary=[]; native=discover_native_report(root/"work")
     if native:
         artifacts.append(Artifact(kind="report",path=str(native.relative_to(root))))

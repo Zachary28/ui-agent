@@ -18,8 +18,9 @@ class AutomationGraphState(TypedDict, total=False):
     config: JsonObject
     mode: str
     route: str
+    resume: bool
     phase: str
-    operation_steps: list[JsonObject]
+    operation_steps: list[str]
     step_index: int
     steps: list[JsonObject]
     artifacts: list[JsonObject]
