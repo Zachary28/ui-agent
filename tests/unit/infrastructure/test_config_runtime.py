@@ -123,4 +123,3 @@ def test_task_goal_builds_request_and_updates_loop_params(config_tree: Path) -> 
     assert switch.params["category"] == "television_series"
     assert switch.params["require_free"] is True
     assert all(configured.fingerprints.model_dump().values())
-
