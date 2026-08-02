@@ -7,6 +7,8 @@ from pathlib import Path
 from ..application.workflows.orchestrator import run as run_workflow
 from ..domain.contracts import AutomationRequest, AutomationResult, RunFingerprints
 from ..infrastructure.execution.runner import CommandRunner
+from ..application.nodes.config import resolve_run_config
+from ..infrastructure.persistence.langgraph import sqlite_checkpointer
 
 
 def _load_environment() -> None:
@@ -48,4 +50,84 @@ def run(
         skills_lock=skills_lock,
     )
 
-__all__ = ["run"]
+
+def run_configured(
+    *,
+    platform: str,
+    app: str,
+    task: str,
+    environment: str | None = None,
+    overrides: list[str] | None = None,
+    config_root: str | Path | None = None,
+    skills_root: str | Path | None = None,
+    skills_lock: str | Path | None = None,
+    target_overrides: dict | None = None,
+    resume_id: str | None = None,
+    mode: str = "plan",
+    operation: str = "run",
+    report_dir: str | None = None,
+    run_id: str | None = None,
+    runner: CommandRunner | None = None,
+    adapters=None,
+) -> AutomationResult:
+    _load_environment()
+    configured = resolve_run_config(
+        platform=platform,
+        app=app,
+        task=task,
+        environment=environment,
+        overrides=overrides,
+        config_root=config_root,
+        target_overrides=target_overrides,
+        mode="live" if resume_id else mode,
+        operation=operation,
+        report_dir=report_dir,
+        run_id=resume_id or run_id,
+        skill_lock_path=skills_lock,
+    )
+    return run(
+        configured.request,
+        runner=runner,
+        adapters=adapters,
+        resume=resume_id is not None,
+        fingerprints=configured.fingerprints,
+        skills_root=skills_root,
+        skills_lock=skills_lock,
+    )
+
+
+def resume_run(
+    resume_id: str,
+    *,
+    report_dir: str | Path = "./artifacts",
+    skills_root: str | Path | None = None,
+    skills_lock: str | Path | None = None,
+    runner: CommandRunner | None = None,
+    adapters=None,
+) -> AutomationResult:
+    database = Path(report_dir) / "langgraph.sqlite"
+    if not database.is_file():
+        raise ValueError(f"checkpoint not found for run id: {resume_id}")
+    config = {"configurable": {"thread_id": resume_id}}
+    with sqlite_checkpointer(database) as checkpointer:
+        checkpoint = checkpointer.saver.get_tuple(config)
+    if checkpoint is None:
+        raise ValueError(f"checkpoint not found for run id: {resume_id}")
+    values = checkpoint.checkpoint.get("channel_values", {})
+    if not values.get("request") or not values.get("fingerprints"):
+        raise ValueError(f"checkpoint metadata is incomplete for run id: {resume_id}")
+    request = AutomationRequest.model_validate(values["request"]).model_copy(
+        update={"run_id": resume_id, "report_dir": str(report_dir), "mode": "live"}
+    )
+    fingerprints = RunFingerprints.model_validate(values["fingerprints"])
+    return run(
+        request,
+        runner=runner,
+        adapters=adapters,
+        resume=True,
+        fingerprints=fingerprints,
+        skills_root=skills_root,
+        skills_lock=skills_lock,
+    )
+
+__all__ = ["run", "run_configured", "resume_run"]
