@@ -1,84 +1,167 @@
+"""Compatibility wrapper that executes Loop plans through the LangGraph subgraph."""
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from threading import Event
+from typing import Any
 
-from ...domain.contracts import LoopPlan
-from ...domain.contracts.runtime_types import ExitReason
-from ...domain.policies.exit import ExitPolicy
-from ...domain.runtime.loop import RuntimeState
-from .scheduler import LoopScheduler
-from .selector import OperationSelector
-from ..services.handlers import AdHandler, EpisodeSwitcher, FeedScroller, GenericOperationHandler, PlaybackController, PopupHandler
+from ...domain.contracts import AutomationRequest, ExitReason, LoopPlan
+from ...infrastructure.execution.runner import CommandRunner
+from ...platforms.base import ExecutionContext
+from ..graphs.loop import LoopGraphServices, build_loop_graph
+from ..services.handlers import (
+    AdHandler,
+    EpisodeSwitcher,
+    FeedScroller,
+    GenericOperationHandler,
+    PlaybackController,
+    PopupHandler,
+)
+
+
+@dataclass(frozen=True)
+class LoopResult:
+    status: str
+    exit_reason: ExitReason | None
+    loop_summary: dict[str, Any]
+    state: dict[str, Any]
 
 
 class LoopWorkflow:
-    def __init__(self, adapter, *, clock=None):
+    def __init__(
+        self,
+        adapter,
+        *,
+        request: AutomationRequest | None = None,
+        runner=None,
+        run_id: str = "loop",
+        clock=None,
+        checkpointer=None,
+    ):
         self.adapter = adapter
+        self.request = request
+        self.runner = runner or CommandRunner()
+        self.run_id = run_id
         self.clock = clock or time
+        self.checkpointer = checkpointer
         self.cancel_event = Event()
+        self._artifact_root = Path(".")
 
     def cancel(self) -> None:
         self.cancel_event.set()
 
-    def run(self, plan: LoopPlan, *, artifact_root: str | Path) -> object:
-        root = Path(artifact_root)
-        root.mkdir(parents=True, exist_ok=True)
-        enabled = [name for name, config in plan.operations.items() if config.enabled]
-        if not enabled:
-            enabled = ["check_playback"]
-        intervals = {name: plan.operations[name].interval_seconds or plan.defaults.interval_seconds for name in enabled if name in plan.operations}
-        scheduler = LoopScheduler(clock=self.clock, intervals=intervals)
-        # Establish initial UI state before interval-driven repetitions.
-        startup = list(enabled)
-        scheduler.start(enabled, startup=startup)
-        state = RuntimeState(max_no_progress_ticks=plan.exit_conditions.max_no_progress_ticks)
-        started = scheduler.started_at
-        operations = {}
-        exit_reason = None
-        while True:
-            state.elapsed_seconds = scheduler.runtime_elapsed()
-            if self.cancel_event.is_set():
-                state.cancelled = True
-            decision = ExitPolicy().evaluate(state, max_runtime_seconds=plan.exit_conditions.max_runtime_seconds, max_consecutive_failures=plan.exit_conditions.max_consecutive_failures)
-            due = scheduler.due_operations()
-            selected = OperationSelector().choose(due, state)
-            if selected:
-                outcome = self._execute(selected, plan)
-                operations.setdefault(selected, {"attempts": 0, "successes": 0})["attempts"] += 1
-                if outcome.succeeded:
-                    operations[selected]["successes"] += 1
-                state.record_attempt(selected, success=outcome.succeeded)
-                state.selected_operation_id = None
-                scheduler.mark_attempt(selected, success=outcome.succeeded)
-                state.record_tick(progress_fingerprint=outcome.message or selected)
-            elif decision.should_exit:
-                exit_reason = decision.reason
-                break
-            else:
-                if self.cancel_event.wait(0.01):
-                    state.cancelled = True
-        return type("LoopResult", (), {"status": "cancelled" if exit_reason == ExitReason.CANCELLED else "succeeded", "exit_reason": exit_reason, "loop_summary": {"ticks": state.current_tick, "elapsed_seconds": state.elapsed_seconds, "operations": operations}})()
+    def run(self, plan: LoopPlan, *, artifact_root: str | Path) -> LoopResult:
+        graph = self.build_graph(artifact_root=artifact_root)
+        minimum = plan.defaults.min_operation_interval_seconds
+        recursion_limit = max(1000, int(plan.exit_conditions.max_runtime_seconds / minimum) * 8 + 100)
+        config: dict[str, Any] = {"recursion_limit": recursion_limit}
+        if self.checkpointer is not None:
+            config["configurable"] = {"thread_id": self.run_id}
+        state = graph.invoke(
+            {
+                "run_id": self.run_id,
+                "plan": plan.model_dump(mode="json"),
+                "cancelled": self.cancel_event.is_set(),
+            },
+            config,
+        )
+        return self.result_from_state(state)
 
-    def _execute(self, operation: str, plan: LoopPlan):
+    def build_graph(self, *, artifact_root: str | Path):
+        self._artifact_root = Path(artifact_root)
+        self._artifact_root.mkdir(parents=True, exist_ok=True)
+        return build_loop_graph(
+            services=LoopGraphServices(
+                clock=self._now,
+                wait=self._wait,
+                observe=self._observe,
+                execute=self._execute,
+            ),
+            checkpointer=self.checkpointer,
+        )
+
+    @staticmethod
+    def result_from_state(state: dict[str, Any]) -> LoopResult:
+        return LoopResult(
+            status=str(state.get("status", "failed")),
+            exit_reason=state.get("exit_reason"),
+            loop_summary=dict(state.get("loop_summary", {})),
+            state=dict(state),
+        )
+
+    def _now(self) -> float:
+        return self.clock.monotonic() if hasattr(self.clock, "monotonic") else self.clock()
+
+    def _wait(self, seconds: float) -> None:
+        if hasattr(self.clock, "advance"):
+            self.clock.advance(seconds)
+        else:
+            self.cancel_event.wait(seconds)
+
+    def _context(self, operation: str, timeout: float) -> ExecutionContext:
+        if self.request is None:
+            raise RuntimeError("platform execution context requires an automation request")
+        return ExecutionContext(
+            request=self.request,
+            runner=self.runner,
+            run_id=self.run_id,
+            event_id=f"loop:{operation}",
+            cwd=self._artifact_root,
+            timeout_seconds=timeout,
+        )
+
+    def _observe(self, state) -> dict[str, Any]:
+        if self.cancel_event.is_set():
+            return {"cancelled": True}
+        if self.request is None or not hasattr(self.adapter, "observe"):
+            return {}
+        observation = self.adapter.observe(self._context("observe", self.request.timeout_seconds))
+        return {
+            "reachable": observation.reachable,
+            "fingerprint": observation.fingerprint,
+            "message": observation.message,
+        }
+
+    def _execute(self, operation: str, timeout: float, attempt: int, state) -> dict[str, Any]:
+        del attempt
+        context = self._context(operation, timeout) if self.request is not None else None
+        plan = LoopPlan.model_validate(state["plan"])
         if operation == "dismiss_popup":
-            return PopupHandler(self.adapter).handle(plan.popup_prompts[0] if plan.popup_prompts else "Close the ordinary popup")
-        if operation == "skip_ad":
-            return AdHandler(self.adapter).skip(plan.ad_prompts[0] if plan.ad_prompts else None or "Skip or close the advertisement")
-        if operation == "play_video":
-            return PlaybackController(self.adapter).play()
-        if operation == "check_playback":
-            return PlaybackController(self.adapter).check()
-        if operation == "recover_playback":
-            return PlaybackController(self.adapter).recover()
-        config = plan.operations.get(operation)
-        params = config.params if config else {}
-        if operation == "switch_episode":
-            return EpisodeSwitcher(self.adapter).switch(strategy=config.strategy or params.get("strategy", "next_episode"), require_free=params.get("require_free", False), category=params.get("category"))
-        if operation == "scroll_feed":
-            return FeedScroller(self.adapter).scroll_once()
-        return GenericOperationHandler(self.adapter).execute(operation, f"Execute safe UI operation {operation}")
+            prompt = plan.popup_prompts[0] if plan and plan.popup_prompts else "Close the ordinary popup"
+            outcome = PopupHandler(self.adapter, context=context).handle(prompt)
+        elif operation == "skip_ad":
+            prompt = plan.ad_prompts[0] if plan and plan.ad_prompts else "Skip or close the advertisement"
+            outcome = AdHandler(self.adapter, context=context).skip(prompt)
+        elif operation == "play_video":
+            outcome = PlaybackController(self.adapter, context=context).play()
+        elif operation == "check_playback":
+            outcome = PlaybackController(self.adapter, context=context).check()
+        elif operation == "recover_playback":
+            outcome = PlaybackController(self.adapter, context=context).recover()
+        elif operation == "switch_episode":
+            config = plan.operations[operation] if plan else None
+            params = config.params if config else {}
+            outcome = EpisodeSwitcher(self.adapter, context=context).switch(
+                strategy=(config.strategy if config else None) or params.get("strategy", "next_episode"),
+                require_free=bool(params.get("require_free", False)),
+                category=params.get("category"),
+            )
+        elif operation == "scroll_feed":
+            outcome = FeedScroller(self.adapter, context=context).scroll_once()
+        else:
+            outcome = GenericOperationHandler(self.adapter, context=context).execute(
+                operation,
+                f"Execute safe UI operation {operation}",
+            )
+        return {
+            "succeeded": outcome.succeeded,
+            "message": outcome.message,
+            "reason": outcome.reason,
+            "artifacts": outcome.artifacts,
+            "metadata": outcome.metadata,
+        }
 
 
-__all__ = ["LoopWorkflow"]
+__all__ = ["LoopResult", "LoopWorkflow"]

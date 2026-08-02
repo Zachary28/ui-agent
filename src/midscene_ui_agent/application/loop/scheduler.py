@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import time
 from threading import Event
-from typing import Callable
+from typing import Any, Callable
+
+from ...domain.contracts import LoopPlan
 
 
 class LoopScheduler:
@@ -47,4 +49,34 @@ class LoopScheduler:
         return True
 
 
-__all__ = ["LoopScheduler"]
+def scheduled_operations(plan: LoopPlan, state: dict[str, Any], *, now: float) -> tuple[list[str], dict[str, Any]]:
+    """Return due operations and JSON updates for one deterministic scheduling pass."""
+    elapsed = max(0.0, now - float(state.get("started_at", now)))
+    fired = set(state.get("fired_triggers", []))
+    next_due = dict(state.get("next_due", {}))
+    last_operation = state.get("last_operation")
+    due: list[str] = []
+    for name, config in plan.operations.items():
+        if not config.enabled:
+            continue
+        triggers: list[str] = []
+        if config.startup and f"startup:{name}" not in fired:
+            triggers.append(f"startup:{name}")
+        if config.on_popup and state.get("popup_detected"):
+            triggers.append(f"popup:{name}:{state.get('tick', 0)}")
+        if config.on_ad and state.get("ad_detected"):
+            triggers.append(f"ad:{name}:{state.get('tick', 0)}")
+        if config.on_stall and state.get("stalled"):
+            triggers.append(f"stall:{name}:{state.get('tick', 0)}")
+        if config.at_runtime is not None and elapsed >= config.at_runtime and f"runtime:{name}" not in fired:
+            triggers.append(f"runtime:{name}")
+        if last_operation in config.after_operation and f"after:{last_operation}:{name}:{state.get('tick', 0)}" not in fired:
+            triggers.append(f"after:{last_operation}:{name}:{state.get('tick', 0)}")
+        interval_due = now >= float(next_due.get(name, now + (config.interval_seconds or plan.defaults.interval_seconds)))
+        if triggers or interval_due:
+            due.append(name)
+            fired.update(triggers)
+    return due, {"elapsed_seconds": elapsed, "fired_triggers": sorted(fired), "next_due": next_due}
+
+
+__all__ = ["LoopScheduler", "scheduled_operations"]

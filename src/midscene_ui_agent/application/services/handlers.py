@@ -14,20 +14,27 @@ class OperationOutcome:
 
 
 class _PromptHandler:
-    def __init__(self, adapter, evidence=None):
+    def __init__(self, adapter, evidence=None, context=None):
         self.adapter = adapter
         self.evidence = evidence
+        self.context = context
 
     def _run(self, prompt: str, *, reason: str | None = None) -> OperationOutcome:
         if self.evidence:
             self.evidence.capture_before(prompt)
         try:
-            response = self.adapter.execute_prompt(prompt)
+            if self.context is None:
+                response = self.adapter.execute_prompt(prompt)
+            else:
+                response = self.adapter.execute_prompt(prompt, self.context)
         except Exception as exc:
             return OperationOutcome(False, str(exc), "COMMAND_FAILED")
         if self.evidence:
             self.evidence.capture_after(prompt)
-        text = str(response)
+        text = getattr(response, "message", None) or str(response)
+        succeeded = getattr(response, "succeeded", True)
+        if not succeeded:
+            return OperationOutcome(False, text, getattr(response, "reason", None) or "COMMAND_FAILED")
         lowered = text.lower()
         if any(marker in lowered for marker in ("login required", "please login", "登录", "sign in")):
             return OperationOutcome(False, text, "LOGIN_REQUIRED")

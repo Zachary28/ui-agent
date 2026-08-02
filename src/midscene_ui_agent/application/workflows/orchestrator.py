@@ -27,8 +27,47 @@ def run(request: AutomationRequest, *, runner: CommandRunner | None = None, adap
         _event(root,run_id,"plan",request.goal)
         result=AutomationResult(run_id=run_id,status="planned",artifacts=[Artifact(kind="plan",path="plan.json")]); checkpoint.put(run_id,result.model_dump()); write_result(result,root); build_manifest(result,request,root); checkpoint.close(); return result
     adapter=(adapters or default_registry())[request.platform]; command_runner=runner or CommandRunner(Path(request.report_dir)); steps=[]
+    loop_workflow = None
     if request.loop is not None:
-        loop_result = LoopWorkflow(adapter).run(request.loop, artifact_root=root)
+        loop_workflow = LoopWorkflow(
+            adapter,
+            request=request,
+            runner=command_runner,
+            run_id=run_id,
+        )
+        execution_graph = loop_workflow.build_graph(artifact_root=root)
+        route = "loop"
+    else:
+        execute_step=partial(
+            execute_operation_step,
+            adapter=adapter,
+            request=request,
+            runner=command_runner,
+            run_id=run_id,
+            work_dir=root/"work",
+            write_event=partial(_event,root,run_id),
+        )
+        execution_graph=build_single_operation_graph(executor=execute_step)
+        route = "single"
+    with sqlite_checkpointer(Path(request.report_dir)/"langgraph.sqlite") as graph_checkpointer:
+        graph=build_automation_graph(execution_graph=execution_graph,checkpointer=graph_checkpointer)
+        graph_input = {
+            "run_id":run_id,
+            "thread_id":run_id,
+            "request":request.model_dump(mode="json"),
+            "mode":request.mode,
+            "route":route,
+            "resume":resume,
+        }
+        if request.loop is not None:
+            graph_input["plan"] = request.loop.model_dump(mode="json")
+            graph_input["cancelled"] = loop_workflow.cancel_event.is_set()
+        graph_state=graph.invoke(
+            graph_input,
+            config={"configurable":{"thread_id":run_id}, "recursion_limit": 100000},
+        )
+    if request.loop is not None:
+        loop_result = loop_workflow.result_from_state(graph_state)
         final = AutomationResult(
             run_id=run_id,
             status="cancelled" if loop_result.status == "cancelled" else "succeeded",
@@ -37,22 +76,6 @@ def run(request: AutomationRequest, *, runner: CommandRunner | None = None, adap
         )
         checkpoint.put(run_id, final.model_dump()); write_result(final, root); build_manifest(final, request, root); checkpoint.close()
         return final
-    execute_step=partial(
-        execute_operation_step,
-        adapter=adapter,
-        request=request,
-        runner=command_runner,
-        run_id=run_id,
-        work_dir=root/"work",
-        write_event=partial(_event,root,run_id),
-    )
-    single_graph=build_single_operation_graph(executor=execute_step)
-    with sqlite_checkpointer(Path(request.report_dir)/"langgraph.sqlite") as graph_checkpointer:
-        graph=build_automation_graph(execution_graph=single_graph,checkpointer=graph_checkpointer)
-        graph_state=graph.invoke(
-            {"run_id":run_id,"thread_id":run_id,"request":request.model_dump(mode="json"),"mode":request.mode,"route":"single","resume":resume},
-            config={"configurable":{"thread_id":run_id}},
-        )
     steps=[StepResult.model_validate(step) for step in graph_state.get("steps",[])]
     status=graph_state.get("status","failed")
     artifacts=[]; secondary=[]; native=discover_native_report(root/"work")

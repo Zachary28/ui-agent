@@ -10,16 +10,17 @@ class OperationSelector:
         "screenshot": 10, "report_snapshot": 5,
     }
 
-    def choose(self, due: list[str], state: RuntimeState) -> str | None:
+    def choose(self, due: list[str], state: RuntimeState, priorities: dict[str, int] | None = None) -> str | None:
         if state.selected_operation_id is not None:
             return None
+        priorities = priorities or self.PRIORITY
         candidates = list(due)
         if state.popup_detected and "dismiss_popup" in candidates:
             selected = "dismiss_popup"
         elif state.ad_detected and "skip_ad" in candidates:
             selected = "skip_ad"
         else:
-            selected = min(candidates, key=lambda name: (-self.PRIORITY.get(name, 0), name), default=None)
+            selected = min(candidates, key=lambda name: (-priorities.get(name, 0), name), default=None)
         if selected:
             state.selected_operation_id = f"tick-{state.current_tick + 1}:{selected}"
         return selected

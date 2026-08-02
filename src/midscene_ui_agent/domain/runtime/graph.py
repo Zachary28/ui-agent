@@ -11,35 +11,8 @@ JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
 JsonObject: TypeAlias = dict[str, JsonValue]
 
 
-class AutomationGraphState(TypedDict, total=False):
-    run_id: str
-    thread_id: str
-    request: JsonObject
-    config: JsonObject
-    mode: str
-    route: str
-    resume: bool
-    phase: str
-    operation_steps: list[str]
-    step_index: int
-    steps: list[JsonObject]
-    artifacts: list[JsonObject]
-    fingerprints: dict[str, str]
-    error: str | None
-    secondary_errors: list[str]
-    status: str
-    exit_reason: ExitReason | None
-    release_attempted: bool
-    resources_released: bool
-    resource_release_state: JsonObject
-    artifact_root: str
-    report_path: str
-    result_path: str
-    manifest_path: str
-    events_path: str
-
-
-class LoopGraphState(TypedDict, total=False):
+class LoopStateFields(TypedDict, total=False):
+    plan: JsonObject
     tick: int
     current_tick: int
     started_at: float
@@ -47,7 +20,12 @@ class LoopGraphState(TypedDict, total=False):
     last_checkpoint_at: float
     elapsed_seconds: float
     due_operations: list[str]
+    enabled_operations: list[str]
+    next_due: dict[str, float]
+    fired_triggers: list[str]
     selected_operation: str | None
+    selected_attempt: int
+    retry_pending: bool
     operation_id: str | None
     operation_attempts: dict[str, int]
     operation_successes: dict[str, int]
@@ -67,14 +45,51 @@ class LoopGraphState(TypedDict, total=False):
     device_unreachable: bool
     model_error: bool
     evidence_refs: list[str]
+    observation: JsonObject
+    last_outcome: JsonObject
+    last_operation: str | None
+    operation_messages: dict[str, str]
+    loop_summary: JsonObject
+    status: str
     exit_reason: ExitReason | None
     cancelled: bool
+
+
+class LoopGraphState(LoopStateFields, total=False):
+    run_id: str
+
+
+class AutomationGraphState(LoopStateFields, total=False):
+    run_id: str
+    thread_id: str
+    request: JsonObject
+    config: JsonObject
+    mode: str
+    route: str
+    resume: bool
+    phase: str
+    operation_steps: list[str]
+    step_index: int
+    steps: list[JsonObject]
+    artifacts: list[JsonObject]
+    fingerprints: dict[str, str]
+    error: str | None
+    secondary_errors: list[str]
+    release_attempted: bool
+    resources_released: bool
+    resource_release_state: JsonObject
+    artifact_root: str
+    report_path: str
+    result_path: str
+    manifest_path: str
+    events_path: str
 
 
 __all__ = [
     "JsonScalar",
     "JsonValue",
     "JsonObject",
+    "LoopStateFields",
     "AutomationGraphState",
     "LoopGraphState",
 ]

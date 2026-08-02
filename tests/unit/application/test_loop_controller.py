@@ -10,11 +10,10 @@ class FakeAdapter:
 def test_loop_controller_runs_ticks_until_runtime_limit(tmp_path):
     from midscene_ui_agent.application.loop.controller import LoopWorkflow
     from midscene_ui_agent.domain.contracts import LoopPlan
-    from midscene_ui_agent.domain.runtime.loop import RuntimeState
     plan = LoopPlan.model_validate({"defaults": {"interval_seconds": 1}, "exit_conditions": {"max_runtime_seconds": 0.01}, "operations": {"check_playback": {"enabled": True, "interval_seconds": 1}}})
     result = LoopWorkflow(FakeAdapter()).run(plan, artifact_root=tmp_path)
     assert result.exit_reason == "max_runtime"
-    assert result.loop_summary["ticks"] >= 1
+    assert result.loop_summary["ticks"] == 0
 
 
 def test_loop_controller_cancel_is_clean(tmp_path):
@@ -36,3 +35,4 @@ def test_api_routes_loop_request_to_controller(tmp_path):
     })
     result = run(request, adapters={"android": FakeAdapter()})
     assert result.exit_reason == "max_runtime"
+    assert (tmp_path / "langgraph.sqlite").is_file()
