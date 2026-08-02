@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 import zipfile
@@ -44,6 +45,40 @@ def test_built_wheel_contains_runtime_resources(tmp_path: Path) -> None:
     assert "midscene_ui_agent/config/schemas/app-profile.schema.json" in names
     assert "midscene_ui_agent/config/schemas/loop-plan.schema.json" in names
     assert "midscene_ui_agent/config/skills.lock.json" in names
+
+    install_root = tmp_path / "site"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            str(wheel),
+            "--no-deps",
+            "--target",
+            str(install_root),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from midscene_ui_agent.infrastructure.config import default_config_root; "
+                "root=default_config_root(); "
+                "assert (root/'defaults.yaml').is_file(); "
+                "assert (root/'skills.lock.json').is_file()"
+            ),
+        ],
+        env={**os.environ, "PYTHONPATH": str(install_root)},
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0
 
 
 @pytest.mark.parametrize(
