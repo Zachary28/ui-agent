@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .runtime import ExitReason
+
 
 OperationName = Literal[
     "dismiss_popup",
@@ -22,18 +24,6 @@ OperationName = Literal[
     "report_snapshot",
 ]
 Trigger = Literal["interval", "startup", "on_popup", "on_ad", "on_stall", "at_runtime", "after_operation"]
-ExitReason = Literal[
-    "runtime_limit",
-    "max_failures",
-    "no_progress",
-    "device_unreachable",
-    "model_error",
-    "login_required",
-    "purchase_required",
-    "unhandled_popup",
-    "cancelled",
-    "completed",
-]
 
 
 class LoopDefaults(BaseModel):
@@ -83,6 +73,9 @@ class ExitConditions(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     max_runtime_seconds: float = Field(default=1800, gt=0)
+    max_switches: int | None = Field(default=None, ge=1)
+    max_scrolls: int | None = Field(default=None, ge=1)
+    target_count: int | None = Field(default=None, ge=1)
     max_consecutive_failures: int = Field(default=3, ge=1)
     max_no_progress_ticks: int = Field(default=5, ge=1)
     stop_on_device_unreachable: bool = True

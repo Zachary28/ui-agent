@@ -137,7 +137,7 @@ class StepResult(BaseModel):
 
 class AutomationResult(BaseModel):
     run_id: str
-    status: Literal["succeeded", "failed", "planned", "needs_confirmation", "cancelled"]
+    status: Literal["succeeded", "failed", "planned", "cancelled", "resume_invalid"]
     steps: list[StepResult] = Field(default_factory=list)
     artifacts: list[Artifact] = Field(default_factory=list)
     error: str | None = None
