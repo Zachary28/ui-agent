@@ -1,6 +1,6 @@
 # LangGraph Runtime Hardening Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Replace the partially connected runtime with a real LangGraph main graph and Loop subgraph, make configuration, retries, evidence, skill locks and resume semantics effective, and add stable contracts for future test-script generation.
 
@@ -67,7 +67,7 @@ Removed after migration:
 - Modify: `src/midscene_ui_agent/domain/runtime/__init__.py`
 - Test: `tests/unit/domain/test_runtime_contracts.py`
 
-- [ ] **Step 1: Write failing contract tests**
+- [x] **Step 1: Write failing contract tests**
 
 ```python
 from pydantic import ValidationError
@@ -101,13 +101,13 @@ def test_fingerprints_require_all_runtime_hashes():
         RunFingerprints(config_hash="a", profile_hash="b")
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/domain/test_runtime_contracts.py -v`
 
 Expected: collection fails because `ExitReason` and `RunFingerprints` do not exist and Loop exit limits are rejected.
 
-- [ ] **Step 3: Add normalized contracts and graph state**
+- [x] **Step 3: Add normalized contracts and graph state**
 
 Implement the public contract shape:
 
@@ -146,13 +146,13 @@ class ResolvedRunConfig(BaseModel):
 
 Define `AutomationGraphState` and `LoopGraphState` as `TypedDict(total=False)` using only JSON-serializable fields. Add `max_switches`, `max_scrolls` and `target_count` to `ExitConditions`. Remove `needs_confirmation` from `AutomationResult.status` and add `resume_invalid`.
 
-- [ ] **Step 4: Run focused and existing contract tests**
+- [x] **Step 4: Run focused and existing contract tests**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/domain/test_runtime_contracts.py tests/test_contracts.py tests/test_loop_contracts.py -v`
 
 Expected: all selected tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/midscene_ui_agent/domain tests/unit/domain/test_runtime_contracts.py
@@ -172,7 +172,7 @@ git commit -m "feat: define typed graph runtime contracts"
 - Test: `tests/unit/infrastructure/test_config_runtime.py`
 - Test: `tests/unit/infrastructure/test_package_resources.py`
 
-- [ ] **Step 1: Write failing tests for environment and point overrides**
+- [x] **Step 1: Write failing tests for environment and point overrides**
 
 ```python
 from midscene_ui_agent.infrastructure.config import ConfigResolver, parse_overrides
@@ -210,13 +210,13 @@ def test_task_goal_prompt_builds_request_and_structured_goal_updates_loop(tmp_pa
     assert configured.request.loop.operations["switch_episode"].params["require_free"] is True
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/infrastructure/test_config_runtime.py -v`
 
 Expected: failure because environment and point-override APIs are missing.
 
-- [ ] **Step 3: Implement deterministic override and resource resolution**
+- [x] **Step 3: Implement deterministic override and resource resolution**
 
 Add:
 
@@ -247,7 +247,7 @@ Move the checked-in skill lock under package config so source and wheel runs use
 midscene_ui_agent = ["config/**/*.yaml", "config/**/*.json"]
 ```
 
-- [ ] **Step 4: Add and run wheel resource test**
+- [x] **Step 4: Add and run wheel resource test**
 
 The test builds a wheel into `tmp_path`, installs it into a temporary target with `pip --no-deps --target`, and asserts `default_config_root()/"defaults.yaml"` exists.
 
@@ -255,7 +255,7 @@ Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/infrastructure/test_con
 
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add pyproject.toml config src/midscene_ui_agent/config src/midscene_ui_agent/infrastructure/config src/midscene_ui_agent/application/nodes/config.py tests/unit/infrastructure
@@ -272,7 +272,7 @@ git commit -m "feat: connect layered packaged configuration"
 - Create: `src/midscene_ui_agent/application/nodes/lifecycle.py`
 - Test: `tests/unit/application/test_automation_graph.py`
 
-- [ ] **Step 1: Write a failing graph topology test**
+- [x] **Step 1: Write a failing graph topology test**
 
 ```python
 def test_main_graph_runs_real_lifecycle_nodes(tmp_path):
@@ -294,13 +294,13 @@ def test_main_graph_runs_real_lifecycle_nodes(tmp_path):
     assert result["status"] == "succeeded"
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/application/test_automation_graph.py -v`
 
 Expected: graph modules do not exist.
 
-- [ ] **Step 3: Implement saver lifecycle and compiled graph**
+- [x] **Step 3: Implement saver lifecycle and compiled graph**
 
 `sqlite_checkpointer(path)` must return an entered `SqliteSaver` whose connection remains valid for graph lifetime. Wrap it in a small context-owning `CheckpointerHandle` with `saver` and `close()` instead of returning a context manager accidentally.
 
@@ -319,13 +319,13 @@ return builder.compile(checkpointer=checkpointer.saver)
 
 No fallback graph is allowed when LangGraph import fails because LangGraph is a core dependency.
 
-- [ ] **Step 4: Run graph and checkpoint tests**
+- [x] **Step 4: Run graph and checkpoint tests**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/application/test_automation_graph.py tests/test_checkpoint_graph.py tests/test_langgraph_compat.py -v`
 
 Expected: all pass after replacing compatibility tests with real saver persistence assertions.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/midscene_ui_agent/application/graphs src/midscene_ui_agent/application/nodes src/midscene_ui_agent/infrastructure/persistence tests/unit/application/test_automation_graph.py tests/test_checkpoint_graph.py tests/test_langgraph_compat.py
@@ -341,7 +341,7 @@ git commit -m "feat: add durable LangGraph automation graph"
 - Create: `src/midscene_ui_agent/application/nodes/execution.py`
 - Test: `tests/unit/platforms/test_platform_contract.py`
 
-- [ ] **Step 1: Write failing platform contract tests**
+- [x] **Step 1: Write failing platform contract tests**
 
 ```python
 from midscene_ui_agent.platforms.registry import default_registry
@@ -358,13 +358,13 @@ def test_every_platform_supports_graph_runtime_protocol():
 
 Add a fake-runner test proving `execute_prompt` builds a Midscene `act` command and returns the command output without invoking subprocess directly in the adapter.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/platforms/test_platform_contract.py -v`
 
 Expected: missing graph runtime methods.
 
-- [ ] **Step 3: Implement the protocol using injected CommandRunner**
+- [x] **Step 3: Implement the protocol using injected CommandRunner**
 
 Add methods with these stable signatures:
 
@@ -378,13 +378,13 @@ class PlatformAdapter(ABC):
 
 `MidsceneCliAdapter` implements defaults through `CommandRunner` supplied in `ExecutionContext`. Platform subclasses only override unsupported or platform-specific behavior. Do not store live runner or request objects in graph state.
 
-- [ ] **Step 4: Run platform and capability tests**
+- [x] **Step 4: Run platform and capability tests**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/platforms/test_platform_contract.py tests/test_adapter_protocol.py tests/test_capabilities.py -v`
 
 Expected: all pass with tests importing `platforms`, not `adapters`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/midscene_ui_agent/platforms src/midscene_ui_agent/application/nodes/execution.py tests/unit/platforms tests/test_adapter_protocol.py tests/test_capabilities.py
@@ -401,7 +401,7 @@ git commit -m "feat: define graph-ready platform adapter protocol"
 - Modify: `src/midscene_ui_agent/interfaces/api.py`
 - Test: `tests/unit/application/test_single_operation_graph.py`
 
-- [ ] **Step 1: Write failing operation sequence and failure-route tests**
+- [x] **Step 1: Write failing operation sequence and failure-route tests**
 
 ```python
 def test_run_operation_checkpoints_each_step(runtime):
@@ -418,13 +418,13 @@ def test_failed_step_routes_to_reporting_without_later_ui_actions(runtime):
     assert result.error
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/application/test_single_operation_graph.py -v`
 
 Expected: current orchestrator bypasses LangGraph and no completed-node checkpoints exist.
 
-- [ ] **Step 3: Implement the operation subgraph and thin runtime entrypoint**
+- [x] **Step 3: Implement the operation subgraph and thin runtime entrypoint**
 
 Build dynamic steps from the operation, but keep graph node names stable by using a repeated `execute_step` node and state cursor:
 
@@ -437,13 +437,13 @@ def next_step(state):
 
 The orchestrator becomes responsible only for constructing runtime dependencies, invoking the compiled graph with `thread_id=run_id`, and mapping final state to `AutomationResult`.
 
-- [ ] **Step 4: Run single-operation regression suite**
+- [x] **Step 4: Run single-operation regression suite**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/application/test_single_operation_graph.py tests/test_result_events.py tests/test_vitest_lifecycle.py tests/test_runner_unicode.py -v`
 
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/midscene_ui_agent/application/graphs/single_operation.py src/midscene_ui_agent/application/graphs/automation.py src/midscene_ui_agent/application/nodes/execution.py src/midscene_ui_agent/application/workflows/orchestrator.py src/midscene_ui_agent/interfaces/api.py tests
@@ -461,7 +461,7 @@ git commit -m "feat: execute single operations through LangGraph"
 - Test: `tests/unit/application/test_loop_graph.py`
 - Test: `tests/unit/domain/test_loop_policies.py`
 
-- [ ] **Step 1: Write failing tests for configured behavior**
+- [x] **Step 1: Write failing tests for configured behavior**
 
 Cover all omitted runtime semantics:
 
@@ -492,13 +492,13 @@ def test_login_required_exits_without_consuming_failure_budget(loop_runtime):
 
 Also test startup/on_popup/on_ad/on_stall/at_runtime/after_operation triggers and configurable priority.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/application/test_loop_graph.py tests/unit/domain/test_loop_policies.py -v`
 
 Expected: current controller ignores timeout, retry, count limits and triggers.
 
-- [ ] **Step 3: Implement deterministic nodes and conditional edges**
+- [x] **Step 3: Implement deterministic nodes and conditional edges**
 
 Nodes must be pure except `execute_operation` and evidence nodes. Use:
 
@@ -519,13 +519,13 @@ builder.add_conditional_edges("evaluate_exit", route_after_evaluation, {
 
 Use the operation configuration for timeout and attempts. Pass all count limits to `ExitPolicy`. Map handler reasons directly to normalized `ExitReason` values.
 
-- [ ] **Step 4: Run Loop tests and existing fake integration tests**
+- [x] **Step 4: Run Loop tests and existing fake integration tests**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/application/test_loop_graph.py tests/unit/domain/test_loop_policies.py tests/unit/application/test_loop_scheduler.py tests/unit/application/test_loop_operations.py tests/unit/application/test_loop_integration_fake.py -v`
 
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/midscene_ui_agent/application/graphs/loop.py src/midscene_ui_agent/application/loop src/midscene_ui_agent/domain/policies tests/unit/application tests/unit/domain
@@ -541,7 +541,7 @@ git commit -m "feat: run Loop Engineering as a LangGraph subgraph"
 - Modify: `src/midscene_ui_agent/infrastructure/config/resolver.py`
 - Test: `tests/unit/application/test_graph_resume.py`
 
-- [ ] **Step 1: Write failing resume tests**
+- [x] **Step 1: Write failing resume tests**
 
 ```python
 def test_resume_skips_completed_single_operation(resumable_runtime):
@@ -567,13 +567,13 @@ def test_resume_observes_non_idempotent_effect_before_retry(resumable_runtime):
     assert resumable_runtime.adapter.count("switch_episode") == 0
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/application/test_graph_resume.py -v`
 
 Expected: `resume` is currently unused and no graph state validation exists.
 
-- [ ] **Step 3: Implement fingerprint and idempotency policies**
+- [x] **Step 3: Implement fingerprint and idempotency policies**
 
 ```python
 IDEMPOTENT_OPERATIONS = {"connect", "health_check", "screenshot", "assert", "check_playback", "report_snapshot"}
@@ -592,13 +592,13 @@ def resume_action(operation: str, effect_verified: bool) -> Literal["retry", "co
 
 Validate fingerprints before `connect_platform`. Use graph checkpoint history to derive completed/pending nodes; do not add another state file.
 
-- [ ] **Step 4: Run resume and checkpoint tests**
+- [x] **Step 4: Run resume and checkpoint tests**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/application/test_graph_resume.py tests/test_sqlite_checkpoint.py tests/test_checkpoint_graph.py -v`
 
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/midscene_ui_agent/domain/policies/resume.py src/midscene_ui_agent/application/graphs src/midscene_ui_agent/infrastructure/config/resolver.py tests/unit/application/test_graph_resume.py tests/test_sqlite_checkpoint.py tests/test_checkpoint_graph.py
@@ -616,7 +616,7 @@ git commit -m "feat: add fingerprinted graph resume semantics"
 - Test: `tests/unit/application/test_lifecycle_nodes.py`
 - Test: `tests/unit/infrastructure/test_graph_reports.py`
 
-- [ ] **Step 1: Write failing lifecycle tests**
+- [x] **Step 1: Write failing lifecycle tests**
 
 ```python
 def test_skill_lock_failure_happens_before_platform_connect(runtime):
@@ -641,13 +641,13 @@ def test_manifest_contains_graph_metadata(runtime):
     assert manifest["graph_phase"] == "finalize_run"
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/application/test_lifecycle_nodes.py tests/unit/infrastructure/test_graph_reports.py -v`
 
 Expected: skill verification and graph evidence are not connected.
 
-- [ ] **Step 3: Implement lifecycle ordering and report metadata**
+- [x] **Step 3: Implement lifecycle ordering and report metadata**
 
 The main graph edge order must be `prepare_run -> verify_skill_lock -> connect_platform`. Evidence nodes call `EvidenceCollector` with stable filenames containing operation_id. Manifest writes only hash values and artifact paths, never secrets or live objects.
 
@@ -655,13 +655,13 @@ The main graph edge order must be `prepare_run -> verify_skill_lock -> connect_p
 
 `finalize_run` must attempt release according to `disconnect_on_exit` and `close_browser_on_exit`, append release failures to `secondary_errors`, write reports, then close owned saver/runner resources.
 
-- [ ] **Step 4: Run lifecycle, evidence and report tests**
+- [x] **Step 4: Run lifecycle, evidence and report tests**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/application/test_lifecycle_nodes.py tests/unit/infrastructure/test_graph_reports.py tests/test_result_events.py tests/unit/infrastructure/test_loop_reports.py -v`
 
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/midscene_ui_agent/application/nodes src/midscene_ui_agent/infrastructure/evidence src/midscene_ui_agent/infrastructure/reporting tests
@@ -677,7 +677,7 @@ git commit -m "feat: enforce skill lock evidence and graph reporting"
 - Test: `tests/unit/interfaces/test_cli_runtime.py`
 - Test: `tests/unit/interfaces/test_api_runtime.py`
 
-- [ ] **Step 1: Write failing CLI/API tests**
+- [x] **Step 1: Write failing CLI/API tests**
 
 ```python
 def test_cli_builds_request_from_task_config(runner, config_root):
@@ -700,13 +700,13 @@ def test_cli_resume_requires_existing_run_id(runner, config_root):
 
 API tests exercise both `run(AutomationRequest(...))` and `run_configured(platform=..., app=..., task=...)`.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/interfaces/test_cli_runtime.py tests/unit/interfaces/test_api_runtime.py -v`
 
 Expected: new options and configured API do not exist.
 
-- [ ] **Step 3: Implement explicit CLI and API entrypoints**
+- [x] **Step 3: Implement explicit CLI and API entrypoints**
 
 Keep `run(request)` for direct Python use. Add:
 
@@ -724,13 +724,13 @@ def run_configured(*, platform: str, app: str, task: str,
 
 CLI `--goal` becomes optional only when task configuration supplies a goal. `--resume` reuses checkpoint request metadata unless explicit overrides are supplied, in which case fingerprint validation decides validity.
 
-- [ ] **Step 4: Run interface and workflow tests**
+- [x] **Step 4: Run interface and workflow tests**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/interfaces tests/test_workflow_routes.py tests/unit/application/test_loop_controller.py -v`
 
 Expected: all pass after replacing controller assertions with graph results.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/midscene_ui_agent/interfaces src/midscene_ui_agent/application/workflows/orchestrator.py tests/unit/interfaces tests/test_workflow_routes.py tests/unit/application/test_loop_controller.py
@@ -748,7 +748,7 @@ git commit -m "feat: expose configured and resumable runtime entrypoints"
 - Test: `tests/unit/application/test_script_renderers.py`
 - Test: `tests/unit/domain/test_test_case_contracts.py`
 
-- [ ] **Step 1: Write failing contract and renderer tests**
+- [x] **Step 1: Write failing contract and renderer tests**
 
 ```python
 def test_test_case_rejects_step_without_action():
@@ -771,13 +771,13 @@ def test_python_renderer_is_deterministic():
     assert "AutomationRequest" in first
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/domain/test_test_case_contracts.py tests/unit/application/test_script_renderers.py -v`
 
 Expected: contracts and renderers do not exist.
 
-- [ ] **Step 3: Implement stable protocols and renderers**
+- [x] **Step 3: Implement stable protocols and renderers**
 
 ```python
 class TestScriptGenerator(Protocol):
@@ -791,13 +791,13 @@ class TestScriptRenderer(Protocol):
 
 Use `json.dumps(..., sort_keys=True, ensure_ascii=False)` for deterministic literals. Python output imports public interfaces only. YAML output uses `yaml.safe_dump(..., sort_keys=False, allow_unicode=True)`.
 
-- [ ] **Step 4: Run generation tests**
+- [x] **Step 4: Run generation tests**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/domain/test_test_case_contracts.py tests/unit/application/test_script_renderers.py -v`
 
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/midscene_ui_agent/domain/contracts src/midscene_ui_agent/application/generation tests/unit/domain/test_test_case_contracts.py tests/unit/application/test_script_renderers.py
@@ -815,7 +815,7 @@ git commit -m "feat: define test generation contracts and renderers"
 - Modify: package `__init__.py` files and affected tests
 - Test: `tests/unit/test_package_boundaries.py`
 
-- [ ] **Step 1: Change boundary tests to require canonical imports**
+- [x] **Step 1: Change boundary tests to require canonical imports**
 
 ```python
 def test_legacy_adapter_namespace_is_removed():
@@ -828,17 +828,17 @@ def test_runtime_imports_only_canonical_graph_and_platform_modules():
     assert build_automation_graph and AndroidAdapter
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/test_package_boundaries.py -v`
 
 Expected: legacy namespace still exists.
 
-- [ ] **Step 3: Delete facades and update every import**
+- [x] **Step 3: Delete facades and update every import**
 
 Run `rg -n "midscene_ui_agent\.adapters|workflows\.graph|LoopCheckpoint|LoopWorkflow|classify_risk" src tests` and migrate each legitimate caller before deleting files. No compatibility import remains.
 
-- [ ] **Step 4: Run import and compile verification**
+- [x] **Step 4: Run import and compile verification**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/unit/test_package_boundaries.py tests/test_adapter_protocol.py tests/test_langgraph_compat.py -v`
 
@@ -846,7 +846,7 @@ Run: `python -m compileall src -q`
 
 Expected: tests pass and compile exits 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add -A src tests
@@ -865,7 +865,7 @@ git commit -m "refactor: remove legacy runtime and adapter facades"
 - Modify: `tests/integration/test_browser_loop.py`
 - Modify: `tests/integration/test_android_loop.py`
 
-- [ ] **Step 1: Add failing distribution smoke test**
+- [x] **Step 1: Add failing distribution smoke test**
 
 Create `tests/distribution/test_installed_cli.py` that receives an installed-wheel target through `UI_AGENT_WHEEL_SITE`, launches `python -m midscene_ui_agent.interfaces.cli --help`, and validates that `--app`, `--task`, `--override` and `--resume` are documented.
 
@@ -873,7 +873,7 @@ Run: `$env:PYTHONPATH='src'; python -m pytest tests/distribution/test_installed_
 
 Expected: failure until wheel data and CLI options are complete.
 
-- [ ] **Step 2: Configure tooling and CI**
+- [x] **Step 2: Configure tooling and CI**
 
 Add:
 
@@ -892,15 +892,15 @@ packages = ["midscene_ui_agent"]
 
 CI matrix uses Python 3.11 and 3.12 and executes compileall, pytest, Ruff, mypy and wheel build. A final job installs the wheel with dependencies and runs the CLI smoke test.
 
-- [ ] **Step 3: Update documentation and PlantUML**
+- [x] **Step 3: Update documentation and PlantUML**
 
 Document the real config CLI, graph nodes, resume rules, skill lock prerequisite, artifact layout, direct-execution safety implications and test-generation contracts. Remove claims that are not covered by automated or opt-in integration tests. Ensure all Markdown and YAML files are UTF-8 without BOM or mojibake.
 
-- [ ] **Step 4: Extend opt-in integration tests**
+- [x] **Step 4: Extend opt-in integration tests**
 
 Browser and Android tests must each cover one interruption/resume path using public/free content. They remain skipped unless `UI_AGENT_RUN_INTEGRATION=1`, model configuration exists and the required target is available.
 
-- [ ] **Step 5: Run full verification**
+- [x] **Step 5: Run full verification**
 
 ```powershell
 $env:PYTHONPATH='src'
@@ -913,7 +913,7 @@ python -m build
 
 Expected: all commands exit 0; integration tests may skip only for documented external prerequisites.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add pyproject.toml .github README.md docs tests/integration tests/distribution
@@ -922,10 +922,10 @@ git commit -m "chore: add runtime quality gates and documentation"
 
 ## Final Verification Checklist
 
-- [ ] Re-read `docs/superpowers/specs/2026-08-02-langgraph-runtime-hardening-design.md` and map each acceptance criterion to a passing test.
-- [ ] Confirm `rg -n "midscene_ui_agent\.adapters|needs_confirmation|approval_required|--approve" src tests docs` has no runtime or documentation hits.
-- [ ] Confirm `rg -n "resume: bool|resume_id" src` shows values consumed by graph restore logic, not merely passed through.
-- [ ] Confirm every `OperationConfig` runtime field has a focused test.
-- [ ] Confirm wheel contents include `midscene_ui_agent/config/defaults.yaml` and both schema files.
-- [ ] Run the full verification commands from Task 12 with fresh output.
-- [ ] Inspect `git status --short` and ensure only intentional changes remain.
+- [x] Re-read `docs/superpowers/specs/2026-08-02-langgraph-runtime-hardening-design.md` and map each acceptance criterion to a passing test.
+- [x] Confirm `rg -n "midscene_ui_agent\.adapters|needs_confirmation|approval_required|--approve" src tests docs` has no runtime or documentation hits.
+- [x] Confirm `rg -n "resume: bool|resume_id" src` shows values consumed by graph restore logic, not merely passed through.
+- [x] Confirm every `OperationConfig` runtime field has a focused test.
+- [x] Confirm wheel contents include `midscene_ui_agent/config/defaults.yaml` and both schema files.
+- [x] Run the full verification commands from Task 12 with fresh output.
+- [x] Inspect `git status --short` and ensure only intentional changes remain.
