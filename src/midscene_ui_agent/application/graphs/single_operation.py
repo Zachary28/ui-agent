@@ -1,4 +1,5 @@
 """Checkpointable deterministic single-operation workflow."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
@@ -30,6 +31,7 @@ def build_single_operation_graph(
 ):
     if checkpointer is not None and inherit_checkpointer:
         raise ValueError("checkpointer and inherit_checkpointer cannot both be supplied")
+
     def prepare(state: AutomationGraphState) -> dict[str, Any]:
         request = state.get("request", {})
         operation = str(request.get("operation", "run"))
@@ -115,9 +117,7 @@ def build_single_operation_graph(
     )
     builder.add_edge("capture_before", "execute_step")
     builder.add_edge("execute_step", "capture_after")
-    builder.add_conditional_edges(
-        "capture_after", route, {"execute": "capture_before", "finish": "finish_operation"}
-    )
+    builder.add_conditional_edges("capture_after", route, {"execute": "capture_before", "finish": "finish_operation"})
     builder.add_edge("finish_operation", END)
     saver = True if inherit_checkpointer else checkpointer.saver if checkpointer is not None else None
     return builder.compile(checkpointer=saver)

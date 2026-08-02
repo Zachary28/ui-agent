@@ -57,15 +57,21 @@ class PlaybackController(_PromptHandler):
     def play(self, prompt: str = "Start or resume the video, without logging in or purchasing") -> OperationOutcome:
         return self._run(prompt, reason="PLAYING")
 
-    def check(self, prompt: str = "Check whether the video is playing and its progress has advanced") -> OperationOutcome:
+    def check(
+        self, prompt: str = "Check whether the video is playing and its progress has advanced"
+    ) -> OperationOutcome:
         return self._run(prompt)
 
-    def recover(self, prompt: str = "Recover playback using pause/resume or reload; do not log in or purchase") -> OperationOutcome:
+    def recover(
+        self, prompt: str = "Recover playback using pause/resume or reload; do not log in or purchase"
+    ) -> OperationOutcome:
         return self._run(prompt, reason="PLAYBACK_RECOVERED")
 
 
 class EpisodeSwitcher(_PromptHandler):
-    def switch(self, *, strategy: str = "next_episode", require_free: bool = False, category: str | None = None) -> OperationOutcome:
+    def switch(
+        self, *, strategy: str = "next_episode", require_free: bool = False, category: str | None = None
+    ) -> OperationOutcome:
         free = " only select an item marked free or limited-free" if require_free else ""
         category_text = f" in category {category!r}" if category else ""
         selected = self._run(f"Select {strategy}{category_text}{free}")
@@ -87,4 +93,12 @@ class GenericOperationHandler(_PromptHandler):
         return self._run(prompt, reason=operation.upper())
 
 
-__all__ = ["OperationOutcome", "PopupHandler", "AdHandler", "PlaybackController", "EpisodeSwitcher", "FeedScroller", "GenericOperationHandler"]
+__all__ = [
+    "OperationOutcome",
+    "PopupHandler",
+    "AdHandler",
+    "PlaybackController",
+    "EpisodeSwitcher",
+    "FeedScroller",
+    "GenericOperationHandler",
+]

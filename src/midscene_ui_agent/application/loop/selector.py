@@ -1,26 +1,45 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from midscene_ui_agent.domain.runtime.loop import RuntimeState
 
 
 class OperationSelector:
-    PRIORITY = {
-        "dismiss_popup": 100, "skip_ad": 90, "recover_playback": 80,
-        "check_playback": 60, "switch_episode": 50, "scroll_feed": 40,
-        "screenshot": 10, "report_snapshot": 5,
+    PRIORITY: dict[str, int] = {
+        "dismiss_popup": 100,
+        "skip_ad": 90,
+        "recover_playback": 80,
+        "check_playback": 60,
+        "switch_episode": 50,
+        "scroll_feed": 40,
+        "screenshot": 10,
+        "report_snapshot": 5,
     }
 
-    def choose(self, due: list[str], state: RuntimeState, priorities: dict[str, int] | None = None) -> str | None:
+    def choose(
+        self,
+        due: list[str],
+        state: RuntimeState,
+        priorities: Mapping[str, int] | None = None,
+    ) -> str | None:
         if state.selected_operation_id is not None:
             return None
         priorities = priorities or self.PRIORITY
         candidates = list(due)
+        selected: str | None
         if state.popup_detected and "dismiss_popup" in candidates:
             selected = "dismiss_popup"
         elif state.ad_detected and "skip_ad" in candidates:
             selected = "skip_ad"
+        elif not candidates:
+            selected = None
         else:
-            selected = min(candidates, key=lambda name: (-priorities.get(name, 0), name), default=None)
+
+            def priority_key(name: str) -> tuple[int, str]:
+                return -priorities.get(name, 0), name
+
+            selected = min(candidates, key=priority_key)
         if selected:
             state.selected_operation_id = f"tick-{state.current_tick + 1}:{selected}"
         return selected

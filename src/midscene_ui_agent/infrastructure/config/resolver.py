@@ -1,4 +1,5 @@
 """Layered, deterministic YAML configuration resolution."""
+
 from __future__ import annotations
 
 import copy
@@ -44,9 +45,15 @@ class ConfigResolver:
     def __init__(self, root: str | Path):
         self.root = Path(root).resolve()
 
-    def resolve(self, *, platform: str, app: str, task: str,
-                environment: str | None = None,
-                overrides: dict[str, Any] | None = None) -> dict[str, Any]:
+    def resolve(
+        self,
+        *,
+        platform: str,
+        app: str,
+        task: str,
+        environment: str | None = None,
+        overrides: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         result = self._load_required(self.root / "defaults.yaml")
         platform_config = self._load_required(self.root / "platforms" / f"{platform}.yaml")
         profile_config = self._load_profile(app)
@@ -179,9 +186,14 @@ class ConfigResolver:
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     @classmethod
-    def fingerprints(cls, resolved: dict[str, Any], *, profile: str | None = None,
-                     skill_lock_hash: str | None = None,
-                     target: dict[str, Any] | None = None) -> dict[str, str]:
+    def fingerprints(
+        cls,
+        resolved: dict[str, Any],
+        *,
+        profile: str | None = None,
+        skill_lock_hash: str | None = None,
+        target: dict[str, Any] | None = None,
+    ) -> dict[str, str]:
         loop = resolved.get("loop", {})
         return {
             "config_hash": cls.canonical_hash(resolved),

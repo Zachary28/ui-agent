@@ -1,4 +1,5 @@
 """Leaf runtime types shared by contracts and checkpoint state."""
+
 from enum import StrEnum
 
 

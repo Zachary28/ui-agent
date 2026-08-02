@@ -1,4 +1,3 @@
-
 from .state import RunState
 from .graph import AutomationGraphState, LoopGraphState
 

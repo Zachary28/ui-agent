@@ -1,4 +1,5 @@
 """Validated, platform-neutral contracts for long-running automation loops."""
+
 from __future__ import annotations
 
 import json
@@ -95,7 +96,9 @@ _UNSAFE_PROMPT_RE = re.compile(
 
 def _validate_safe_prompt(value: str) -> str:
     if _UNSAFE_PROMPT_RE.search(value):
-        raise ValueError("prompts must not instruct login, phone, password, payment, purchase, or membership submission")
+        raise ValueError(
+            "prompts must not instruct login, phone, password, payment, purchase, or membership submission"
+        )
     return value
 
 
@@ -127,20 +130,28 @@ class LoopPlan(BaseModel):
             if config.max_attempts is None:
                 config.max_attempts = self.defaults.max_attempts
             if config.interval_seconds < minimum:
-                raise ValueError(f"operation {name} interval_seconds must be >= min_operation_interval_seconds ({minimum})")
+                raise ValueError(
+                    f"operation {name} interval_seconds must be >= min_operation_interval_seconds ({minimum})"
+                )
 
             if config.prompt is not None:
                 _validate_safe_prompt(config.prompt)
             if name == "switch_episode" and config.enabled:
                 strategy = config.strategy or config.params.get("strategy")
-                target_count = config.target_count if config.target_count is not None else config.params.get("target_count")
+                target_count = (
+                    config.target_count if config.target_count is not None else config.params.get("target_count")
+                )
                 if not strategy and not target_count:
                     raise ValueError("enabled switch_episode requires strategy or target_count")
                 if target_count is not None and (not isinstance(target_count, int) or target_count <= 0):
                     raise ValueError("switch_episode target_count must be positive")
             if name == "scroll_feed" and config.enabled:
                 limit = config.scroll_limit if config.scroll_limit is not None else config.params.get("scroll_limit")
-                duration = config.duration_seconds if config.duration_seconds is not None else config.params.get("duration_seconds")
+                duration = (
+                    config.duration_seconds
+                    if config.duration_seconds is not None
+                    else config.params.get("duration_seconds")
+                )
                 if (limit is None or limit <= 0) and (duration is None or duration <= 0):
                     raise ValueError("enabled scroll_feed requires a positive scroll_limit or duration_seconds")
         return self
@@ -160,6 +171,12 @@ class LoopRequest(BaseModel):
 
 
 __all__ = [
-    "OperationName", "Trigger", "ExitReason", "LoopDefaults", "OperationConfig",
-    "ExitConditions", "LoopPlan", "LoopRequest",
+    "OperationName",
+    "Trigger",
+    "ExitReason",
+    "LoopDefaults",
+    "OperationConfig",
+    "ExitConditions",
+    "LoopPlan",
+    "LoopRequest",
 ]

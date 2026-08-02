@@ -78,12 +78,15 @@ def test_resume_run_recomputes_explicit_target_and_skill_lock_fingerprints(monke
         lambda request, **kwargs: captured.update(request=request, **kwargs) or "ok",
     )
 
-    assert resume_run(
-        "resume-1",
-        report_dir=report_dir,
-        skills_lock=lock,
-        target_overrides={"url": "https://changed.test"},
-    ) == "ok"
+    assert (
+        resume_run(
+            "resume-1",
+            report_dir=report_dir,
+            skills_lock=lock,
+            target_overrides={"url": "https://changed.test"},
+        )
+        == "ok"
+    )
     assert captured["request"].target.url == "https://changed.test"
     assert captured["fingerprints"].target_fingerprint != "target-old"
     assert captured["fingerprints"].skill_lock_hash != "skill-old"

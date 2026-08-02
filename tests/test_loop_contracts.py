@@ -27,7 +27,12 @@ def test_operation_interval_and_scroll_constraints():
     from midscene_ui_agent.domain.contracts.loop_contracts import LoopPlan
 
     with pytest.raises(ValidationError):
-        LoopPlan.model_validate({"defaults": {"min_operation_interval_seconds": 5}, "operations": {"check_playback": {"interval_seconds": 4}}})
+        LoopPlan.model_validate(
+            {
+                "defaults": {"min_operation_interval_seconds": 5},
+                "operations": {"check_playback": {"interval_seconds": 4}},
+            }
+        )
     with pytest.raises(ValidationError):
         LoopPlan.model_validate({"operations": {"scroll_feed": {"enabled": True}}})
     assert LoopPlan.model_validate({"operations": {"scroll_feed": {"enabled": True, "params": {"scroll_limit": 2}}}})
@@ -36,6 +41,7 @@ def test_operation_interval_and_scroll_constraints():
 def test_automation_request_accepts_optional_loop():
     from midscene_ui_agent.domain.contracts import AutomationRequest
 
-    request = AutomationRequest.model_validate({"platform": "browser", "target": {"url": "https://example.test"}, "goal": "watch"})
+    request = AutomationRequest.model_validate(
+        {"platform": "browser", "target": {"url": "https://example.test"}, "goal": "watch"}
+    )
     assert request.loop is None
-

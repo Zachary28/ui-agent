@@ -6,10 +6,10 @@
 
 | 文件 | 说明 |
 |------|------|
-| `01-architecture.puml` | **系统架构图** - DDD 分层架构：Interfaces → Application → Domain + Infrastructure + Platforms + Config |
-| `02-single-task.puml` | **单次任务时序图** - plan 模式生成计划 vs live 模式真实执行全流程 |
-| `03-loop-engineering.puml` | **循环播放时序图** - LoopWorkflow 主循环：调度 → 优先级选择 → 执行 → 退出判断 |
-| `04-config-layering.puml` | **配置分层图** - defaults → platform → app → task → CLI 五层叠加合并 |
+| `01-architecture.puml` | **系统架构图** - 分层、主图/子图、六平台、报告和测试生成边界 |
+| `02-single-task.puml` | **单操作时序图** - plan、skill 校验、操作 checkpoint、资源释放和报告 |
+| `03-loop-engineering.puml` | **Loop 与恢复时序图** - 调度、优先级、退出、中断、指纹和幂等恢复 |
+| `04-config-layering.puml` | **配置与 Skill Lock 图** - 六层配置、schema、指纹和运行前 skill 校验 |
 
 ## 查看方式
 

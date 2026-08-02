@@ -1,4 +1,5 @@
 """Runtime configuration and normalized exit contracts."""
+
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator

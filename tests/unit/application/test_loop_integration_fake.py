@@ -12,5 +12,6 @@ def test_runtime_records_attempts_and_failures():
 
 def test_all_platforms_are_registered():
     from midscene_ui_agent.platforms.registry import default_registry
+
     registry = default_registry()
     assert set(registry) == {"browser", "computer", "android", "ios", "harmony", "vitest_e2e"}

@@ -1,4 +1,5 @@
 """JSON-serializable state contracts for checkpointed runtime graphs."""
+
 from __future__ import annotations
 
 from typing import TypeAlias, TypedDict

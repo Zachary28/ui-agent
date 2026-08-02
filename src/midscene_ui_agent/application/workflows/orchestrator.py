@@ -1,11 +1,15 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 import hashlib
-import json, uuid
+import json
+import uuid
 import os
 from functools import partial
 from pathlib import Path
+from typing import Any, cast
+
 from ...domain.contracts import AutomationRequest, AutomationResult, Artifact, ExitReason, RunFingerprints
 from ...domain.policies.resume import ResumeInvalid, validate_resume
+from ...domain.runtime.graph import AutomationGraphState
 from ...infrastructure.execution.runner import CommandRunner
 from ...platforms.registry import default_registry
 from ...infrastructure.reporting.reports import write_result, build_manifest
@@ -41,8 +45,10 @@ def _request_fingerprints(request: AutomationRequest) -> RunFingerprints:
         target_fingerprint=ConfigResolver.canonical_hash(request.target.model_dump(mode="json")),
     )
 
+
 def _event(root: Path, run_id: str, kind: str, message: str) -> None:
-    Event(kind=kind,message=message,run_id=run_id).write(root/"events.jsonl")
+    Event(kind=kind, message=message, run_id=run_id).write(root / "events.jsonl")
+
 
 def run(
     request: AutomationRequest,
@@ -54,38 +60,66 @@ def run(
     skills_root: str | Path | None = None,
     skills_lock: str | Path | None = None,
 ) -> AutomationResult:
-    run_id=request.run_id or uuid.uuid4().hex; root=Path(request.report_dir)/run_id; root.mkdir(parents=True,exist_ok=True); (root/"work").mkdir(exist_ok=True)
-    checkpoint=SqliteCheckpoint(Path(request.report_dir)/"checkpoints.sqlite")
-    checkpoint.put(run_id,{"status":"running","platform":request.platform,"operation":request.operation})
-    plan={"platform":request.platform,"operation":request.operation,"goal":request.goal}
+    run_id = request.run_id or uuid.uuid4().hex
+    root = Path(request.report_dir) / run_id
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "work").mkdir(exist_ok=True)
+    checkpoint = SqliteCheckpoint(Path(request.report_dir) / "checkpoints.sqlite")
+    checkpoint.put(run_id, {"status": "running", "platform": request.platform, "operation": request.operation})
+    plan = {"platform": request.platform, "operation": request.operation, "goal": request.goal}
     if request.mode == "plan":
-        (root/"plan.json").write_text(json.dumps(plan,indent=2),encoding="utf-8")
-        _event(root,run_id,"plan",request.goal)
-        result=AutomationResult(run_id=run_id,status="planned",artifacts=[Artifact(kind="plan",path="plan.json")]); checkpoint.put(run_id,result.model_dump()); write_result(result,root); build_manifest(result,request,root); checkpoint.close(); return result
+        (root / "plan.json").write_text(json.dumps(plan, indent=2), encoding="utf-8")
+        _event(root, run_id, "plan", request.goal)
+        result = AutomationResult(run_id=run_id, status="planned", artifacts=[Artifact(kind="plan", path="plan.json")])
+        checkpoint.put(run_id, result.model_dump())
+        write_result(result, root)
+        build_manifest(result, request, root)
+        checkpoint.close()
+        return result
     effective_fingerprints = fingerprints or _request_fingerprints(request)
-    resolved_skills_root = Path(skills_root) if skills_root is not None else Path(os.environ["MIDSCENE_SKILLS_ROOT"]) if os.environ.get("MIDSCENE_SKILLS_ROOT") else None
-    resolved_skills_lock = Path(skills_lock) if skills_lock is not None else default_skill_lock_path() if resolved_skills_root is not None else None
+    resolved_skills_root = (
+        Path(skills_root)
+        if skills_root is not None
+        else Path(os.environ["MIDSCENE_SKILLS_ROOT"])
+        if os.environ.get("MIDSCENE_SKILLS_ROOT")
+        else None
+    )
+    resolved_skills_lock = (
+        Path(skills_lock)
+        if skills_lock is not None
+        else default_skill_lock_path()
+        if resolved_skills_root is not None
+        else None
+    )
 
     def verify_skills(state):
         del state
         if resolved_skills_lock is not None and resolved_skills_root is None:
-            return {"phase": "verify_skill_lock", "status": "failed", "error": "skills root is required when a skill lock is supplied"}
+            return {
+                "phase": "verify_skill_lock",
+                "status": "failed",
+                "error": "skills root is required when a skill lock is supplied",
+            }
         if resolved_skills_root is None:
             return {"phase": "verify_skill_lock", "status": "running"}
+        assert resolved_skills_lock is not None
         try:
             SkillCatalog(resolved_skills_root).verify_platform_lock(resolved_skills_lock, request.platform)
         except Exception as exc:
             return {"phase": "verify_skill_lock", "status": "failed", "error": str(exc)}
         return {"phase": "verify_skill_lock", "status": "running"}
 
-    def finalize_graph(state):
-        updates = dict(finalize_run(state))
+    def finalize_graph(state: AutomationGraphState) -> dict[str, Any]:
+        updates: dict[str, Any] = dict(finalize_run(state))
         secondary = list(state.get("secondary_errors", []))
         exit_conditions = request.loop.exit_conditions if request.loop is not None else None
         should_release = (
-            bool(exit_conditions.close_browser_on_exit) if request.platform == "browser" and exit_conditions
-            else False if request.platform == "browser"
-            else bool(exit_conditions.disconnect_on_exit) if exit_conditions
+            bool(exit_conditions.close_browser_on_exit)
+            if request.platform == "browser" and exit_conditions
+            else False
+            if request.platform == "browser"
+            else bool(exit_conditions.disconnect_on_exit)
+            if exit_conditions
             else True
         )
         if state.get("phase") == "verify_skill_lock" and state.get("error"):
@@ -112,7 +146,7 @@ def run(
                 updates["resources_released"] = False
                 secondary.append(f"RESOURCE_RELEASE_FAILED: {exc}")
             updates["secondary_errors"] = secondary
-        combined = {**state, **updates}
+        combined = cast(AutomationGraphState, {**state, **updates})
         updates.update(
             finalize_graph_reports(
                 combined,
@@ -123,48 +157,50 @@ def run(
             )
         )
         return updates
-    adapter=(adapters or default_registry())[request.platform]; command_runner=runner or CommandRunner(Path(request.report_dir)); steps=[]
-    loop_workflow = None
+
+    adapter = (adapters or default_registry())[request.platform]
+    command_runner = runner or CommandRunner(Path(request.report_dir))
+    loop_runtime: LoopRuntime | None = None
     if request.loop is not None:
-        loop_workflow = LoopRuntime(
+        loop_runtime = LoopRuntime(
             adapter,
             request=request,
             runner=command_runner,
             run_id=run_id,
         )
-        execution_graph = loop_workflow.build_graph(artifact_root=root, inherit_checkpointer=True)
+        execution_graph = loop_runtime.build_graph(artifact_root=root, inherit_checkpointer=True)
         route = "loop"
     else:
-        execute_step=partial(
+        execute_step = partial(
             execute_operation_step,
             adapter=adapter,
             request=request,
             runner=command_runner,
             run_id=run_id,
-            work_dir=root/"work",
-            write_event=partial(_event,root,run_id),
+            work_dir=root / "work",
+            write_event=partial(_event, root, run_id),
         )
-        execution_graph=build_single_operation_graph(executor=execute_step, inherit_checkpointer=True)
+        execution_graph = build_single_operation_graph(executor=execute_step, inherit_checkpointer=True)
         route = "single"
-    with sqlite_checkpointer(Path(request.report_dir)/"langgraph.sqlite") as graph_checkpointer:
-        graph=build_automation_graph(
+    with sqlite_checkpointer(Path(request.report_dir) / "langgraph.sqlite") as graph_checkpointer:
+        graph = build_automation_graph(
             execution_graph=execution_graph,
             services={"verify": verify_skills, "finalize": finalize_graph},
             checkpointer=graph_checkpointer,
         )
         graph_input = {
-            "run_id":run_id,
-            "thread_id":run_id,
-            "request":request.model_dump(mode="json"),
-            "mode":request.mode,
-            "route":route,
-            "resume":resume,
+            "run_id": run_id,
+            "thread_id": run_id,
+            "request": request.model_dump(mode="json"),
+            "mode": request.mode,
+            "route": route,
+            "resume": resume,
             "fingerprints": effective_fingerprints.model_dump(mode="json"),
         }
-        if request.loop is not None:
+        if request.loop is not None and loop_runtime is not None:
             graph_input["plan"] = request.loop.model_dump(mode="json")
-            graph_input["cancelled"] = loop_workflow.cancel_event.is_set()
-        graph_config={"configurable":{"thread_id":run_id}, "recursion_limit": 100000}
+            graph_input["cancelled"] = loop_runtime.cancel_event.is_set()
+        graph_config = {"configurable": {"thread_id": run_id}, "recursion_limit": 100000}
         if resume:
             snapshot = graph.get_state(graph_config)
             try:
@@ -193,10 +229,10 @@ def run(
                 )
                 checkpoint.close()
                 return final
-            graph_state=graph.invoke(None, config=graph_config)
+            graph_state = graph.invoke(None, config=graph_config)
         else:
             graph_checkpointer.saver.delete_thread(run_id)
-            graph_state=graph.invoke(graph_input, config=graph_config)
+            graph_state = graph.invoke(graph_input, config=graph_config)
     final = AutomationResult.model_validate(graph_state["result_payload"])
     checkpoint.put(run_id, final.model_dump())
     checkpoint.close()

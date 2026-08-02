@@ -1,97 +1,89 @@
-﻿@startuml
+@startuml
 !theme plain
-skinparam backgroundColor #FEFEFE
 skinparam defaultFontSize 13
+title Midscene UI Agent 第一版架构
 
-title Midscene UI Agent - 系统架构图
-
-package "Interfaces 接口层" as interfaces #E8F5E9 {
-  [CLI (Typer)] as cli
-  [API (Python)] as api
+package "Interfaces" {
+  [Typer CLI] as CLI
+  [Python API\nrun / run_configured / resume_run] as API
 }
 
-package "Application 应用层" as app #F3E5F5 {
-  package "Workflows 工作流" as wf {
-    [Orchestrator] as orch
-    [Graph Engine] as graph
+package "Application" {
+  [Orchestrator\n依赖构造与图调用] as ORCH
+  package "LangGraph" {
+    [Automation Graph] as MAIN
+    [Single Operation Subgraph] as SINGLE
+    [Loop Subgraph] as LOOP
   }
-  package "Services 服务" as svc {
-    [SkillCatalog] as skills
-    [Operation Handlers] as handlers
-  }
-  package "Loop 循环引擎" as loop #FFF3E0 {
-    [LoopWorkflow] as loopwf
-    [LoopScheduler] as sched
-    [OperationSelector] as selector
-  }
+  [Config Node] as CONFNODE
+  [Lifecycle / Evidence / Reporting Nodes] as NODES
+  [Loop Runtime / Handlers] as SERVICES
+  [Test Generation Protocols\nPython & YAML Renderers] as GEN
 }
 
-package "Domain 领域层" as domain #E3F2FD {
-  [Contracts\n(AutomationRequest, LoopPlan, ...)] as contracts
-  [RuntimeState] as state
-  [ExitPolicy] as exitp
-  [classify_risk] as safety
+package "Domain" {
+  [Automation / Loop Contracts] as CONTRACTS
+  [Graph JSON State] as STATE
+  [Exit / Retry / Resume Policies] as POLICIES
+  [TestCaseSpec / TestStepSpec] as TESTSPEC
 }
 
-package "Infrastructure 基础设施层" as infra #FCE4EC {
-  package "Execution" as exec {
-    [CommandRunner] as runner
-  }
-  package "Reporting" as rep {
-    [Reports &\nManifest] as reports
-  }
-  package "Checkpoint" as ck {
-    [SqliteCheckpoint] as sqlite
-    [JsonCheckpoint] as jsonck
-  }
-  package "Evidence" as ev {
-    [Events &\nRedaction] as events
-  }
+package "Infrastructure" {
+  [Layered Config Resolver] as CONFIG
+  database "LangGraph SQLite\nthread_id = run_id" as SQLITE
+  [CommandRunner] as RUNNER
+  [Evidence Collector] as EVIDENCE
+  [Result / Manifest / Native Reports] as REPORTS
+  [Skill Lock Catalog] as SKILLS
 }
 
-package "Platforms 平台适配层" as plat #FFF9C4 {
-  [Browser] as browser
-  [Computer (RDP)] as computer
-  [Android (ADB)] as android
-  [iOS (WDA)] as ios
-  [Harmony OS (HDC)] as harmony
-  [Vitest E2E] as vitest
-  [PlatformRegistry] as registry
+package "Canonical Platforms" {
+  [Browser] as WEB
+  [Computer] as COMPUTER
+  [Android] as ANDROID
+  [iOS] as IOS
+  [HarmonyOS] as HARMONY
+  [Vitest E2E] as VITEST
 }
 
-cloud "MIDSCENE CLI" as midscene #ECEFF1 {
-  [@midscene/web@1]
-  [@midscene/android@1]
-  [@midscene/computer@1]
-  [@midscene/ios@1]
-  [@midscene/harmony@1]
+cloud "Official Midscene CLI" {
+  [npx @midscene/*@1] as MIDSCENE
 }
 
-package "Config 配置" as config #E1F5FE {
-  file "defaults.yaml" as defconf
-  file "platforms/\n*.yaml" as platconf
-  file "apps/<app>.yaml" as appconf
-  file "tasks/<task>.yaml" as taskconf
-}
+CLI --> API
+API --> CONFNODE : configured request
+API --> ORCH : validated request
+CONFNODE --> CONFIG
+ORCH --> MAIN
+MAIN --> SINGLE : route=single
+MAIN --> LOOP : route=loop
+LOOP --> SERVICES
+MAIN --> NODES
+MAIN --> SQLITE
+SINGLE --> SQLITE
+LOOP --> SQLITE
+NODES --> EVIDENCE
+NODES --> REPORTS
+NODES --> SKILLS
+ORCH --> WEB
+ORCH --> COMPUTER
+ORCH --> ANDROID
+ORCH --> IOS
+ORCH --> HARMONY
+ORCH --> VITEST
+WEB --> RUNNER
+COMPUTER --> RUNNER
+ANDROID --> RUNNER
+IOS --> RUNNER
+HARMONY --> RUNNER
+RUNNER --> MIDSCENE
+GEN --> TESTSPEC
+ORCH --> CONTRACTS
+MAIN --> STATE
+LOOP --> POLICIES
 
-' Dependencies
-interfaces --> app : 调用
-app --> domain : 依赖
-app --> infra : 使用
-app --> plat : 路由
-plat --> infra : 使用
-plat --> midscene : npx 命令
-loop --> handlers : 调度
-handlers --> domain : 使用
-app ..> config : 加载配置
-
-' Config hierarchy
-defconf --> platconf : 叠加
-platconf --> appconf : 叠加
-appconf --> taskconf : 叠加
-
-' Flow
-cli --> orch : run(request)
-api --> orch : run(request)
-
+note bottom of MAIN
+prepare_run -> verify_skill_lock
+-> execute_route -> finalize_run
+end note
 @enduml

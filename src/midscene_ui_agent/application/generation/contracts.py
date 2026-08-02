@@ -1,4 +1,5 @@
 """Protocols for model-backed test generation and deterministic rendering."""
+
 from __future__ import annotations
 
 from typing import Any, Mapping, Protocol

@@ -1,59 +1,51 @@
-﻿@startuml
+@startuml
 !theme plain
 skinparam defaultFontSize 13
+title 单操作任务与报告时序
 
-title 单次任务执行 - 时序图
+actor 用户
+participant CLI
+participant "Config/API" as API
+participant Orchestrator as ORCH
+participant "Automation Graph" as MAIN
+participant "Single Operation Subgraph" as SINGLE
+participant PlatformAdapter as ADAPTER
+participant CommandRunner as RUNNER
+participant "Midscene CLI" as MIDSCENE
+database "langgraph.sqlite" as DB
+participant "Evidence / Reports" as REPORT
 
-actor "用户" as user
-participant "CLI (Typer)" as cli
-participant "Orchestrator" as orch
-participant "PlatformAdapter" as adapter
-participant "CommandRunner" as runner
-participant "Midscene CLI\n(npx @midscene/...)" as midscene
-participant "Checkpoint\n(SQLite)" as ckpt
-participant "Reports" as reports
+用户 -> CLI : run --platform ... [--app --task]
+CLI -> API : 解析参数与分层配置
+API -> ORCH : AutomationRequest + fingerprints
 
-== 启动 ==
-user -> cli : midscene-ui-agent run\n--platform browser --url ...
-cli -> orch : run(AutomationRequest)
-orch -> orch : _load_environment()\n加载 .env 配置
-
-orch -> ckpt : put(run_id, status=running)
-activate ckpt
-deactivate ckpt
-
-== Plan 模式 (默认) ==
-opt mode == "plan"
-  orch -> orch : 生成 plan.json
-  orch -> ckpt : put(run_id, status=planned)
-  orch -> reports : write_result()
-  orch --> cli : AutomationResult(status=planned)
-  deactivate orch
-  cli --> user : 执行计划已生成
-end
-
-== Live 模式 - 真实执行 ==
-opt mode == "live"
-  orch -> orch : 构建操作序列\n[connect, health_check, run, screenshot]
-  
-  loop 每个操作
-    orch -> adapter : command(request, operation)
-    adapter --> orch : CommandSpec(argv, cwd)
-    orch -> runner : run(CommandSpec)
-    runner -> midscene : npx -y @midscene/web@1 ...
-    activate midscene
-    midscene --> runner : stdout + returncode
-    deactivate midscene
-    runner --> orch : CommandResult
-    orch -> orch : 记录步骤结果
+alt mode = plan
+  ORCH -> REPORT : 写 plan.json/result/manifest
+  ORCH --> 用户 : planned
+else mode = live
+  ORCH -> MAIN : invoke(state, thread_id=run_id)
+  MAIN -> DB : checkpoint prepare_run
+  MAIN -> MAIN : verify_skill_lock
+  alt lock 不匹配
+    MAIN -> REPORT : finalize failed
+    MAIN --> 用户 : failed（未连接 UI）
+  else lock 有效
+    MAIN -> SINGLE : execute_route
+    loop 操作序列
+      SINGLE -> REPORT : before evidence
+      SINGLE -> ADAPTER : command(request, operation)
+      ADAPTER -> RUNNER : CommandSpec
+      RUNNER -> MIDSCENE : npx -y @midscene/...@1
+      MIDSCENE --> RUNNER : returncode/stdout/stderr
+      RUNNER --> SINGLE : CommandResult
+      SINGLE -> REPORT : after evidence
+      SINGLE -> DB : 操作状态 checkpoint
+    end
+    SINGLE --> MAIN : succeeded/failed + steps
+    MAIN -> ADAPTER : release（按退出配置）
+    MAIN -> REPORT : result.json + manifest.json + native report
+    MAIN -> DB : finalize_run checkpoint
+    MAIN --> 用户 : AutomationResult
   end
-
-  orch -> reports : write_result()\nbuild_manifest()
-  orch -> reports : discover_native_report()\nconvert (HTML -> Markdown)
-  orch -> ckpt : put(run_id, final_result)
-  orch --> cli : AutomationResult(status=succeeded|failed)
-  deactivate orch
-  cli --> user : 结果 + 报告路径
 end
-
 @enduml

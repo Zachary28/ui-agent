@@ -91,8 +91,9 @@ def test_interrupted_single_operation_resumes_at_next_checkpoint(tmp_path) -> No
     calls: list[str] = []
     with sqlite_checkpointer(tmp_path / "single.sqlite") as checkpointer:
         graph = build_single_operation_graph(
-            executor=lambda state, operation: calls.append(operation)
-            or {"phase": operation, "status": "succeeded", "message": "ok"},
+            executor=lambda state, operation: (
+                calls.append(operation) or {"phase": operation, "status": "succeeded", "message": "ok"}
+            ),
             checkpointer=checkpointer,
         )
         config = {"configurable": {"thread_id": "r1"}}
@@ -126,8 +127,7 @@ def test_loop_resume_verifies_non_idempotent_effect_before_execution(tmp_path) -
         clock=clock,
         wait=wait,
         observe=lambda state: {},
-        execute=lambda operation, timeout, attempt, state: calls.append(operation)
-        or {"succeeded": True},
+        execute=lambda operation, timeout, attempt, state: calls.append(operation) or {"succeeded": True},
         verify_effect=lambda operation, operation_id, state: verifications.append((operation, operation_id)) or True,
     )
     plan = {

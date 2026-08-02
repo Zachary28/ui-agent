@@ -1,4 +1,5 @@
 """Public, platform-neutral request and result contracts."""
+
 from __future__ import annotations
 
 import re
@@ -8,7 +9,25 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from .runtime_types import ExitReason
 
 Platform = Literal["browser", "computer", "android", "ios", "harmony", "vitest_e2e"]
-Operation = Literal["run", "connect", "health_check", "screenshot", "assert", "launch", "raw", "tap_locate", "list_displays", "report", "disconnect", "close", "debug", "convert", "create", "update", "init"]
+Operation = Literal[
+    "run",
+    "connect",
+    "health_check",
+    "screenshot",
+    "assert",
+    "launch",
+    "raw",
+    "tap_locate",
+    "list_displays",
+    "report",
+    "disconnect",
+    "close",
+    "debug",
+    "convert",
+    "create",
+    "update",
+    "init",
+]
 
 
 class ReferenceImage(BaseModel):
@@ -98,29 +117,41 @@ class AutomationRequest(BaseModel):
     def valid_for_platform(self) -> "AutomationRequest":
         t, op = self.target, self.operation
         if self.platform == "browser":
-            modes = int(bool(t.cdp)) + int(t.bridge) + int(t.browser_mode == "puppeteer")
             if t.cdp and t.bridge:
                 raise ValueError("cdp and bridge cannot be combined")
             if not t.url and not t.cdp and not t.bridge:
                 raise ValueError("browser requires url, cdp, or bridge")
             if t.browser_mode in {"cdp", "bridge"} and not (t.cdp if t.browser_mode == "cdp" else t.bridge):
                 raise ValueError("explicit browser mode requires its connection target")
-            if op == "launch": raise ValueError("browser launch is unsupported")
-        elif self.platform in {"android", "harmony"} and op in {"connect", "health_check", "run", "screenshot", "assert", "launch", "raw", "tap_locate", "disconnect"} and not t.device_id:
+            if op == "launch":
+                raise ValueError("browser launch is unsupported")
+        elif (
+            self.platform in {"android", "harmony"}
+            and op
+            in {"connect", "health_check", "run", "screenshot", "assert", "launch", "raw", "tap_locate", "disconnect"}
+            and not t.device_id
+        ):
             raise ValueError("device_id is required")
         if self.platform == "vitest_e2e":
-            if op not in {"run", "create", "update", "debug", "convert", "init"}: raise ValueError("unsupported Vitest operation")
-            if not t.project_dir or not t.vitest_platform: raise ValueError("Vitest requires project_dir and vitest_platform")
-            if op in {"update", "debug"} and not self.test_name: raise ValueError("test_name is required")
+            if op not in {"run", "create", "update", "debug", "convert", "init"}:
+                raise ValueError("unsupported Vitest operation")
+            if not t.project_dir or not t.vitest_platform:
+                raise ValueError("Vitest requires project_dir and vitest_platform")
+            if op in {"update", "debug"} and not self.test_name:
+                raise ValueError("test_name is required")
         elif op in {"debug", "convert", "create", "update", "init"}:
             raise ValueError("Vitest lifecycle operations are Vitest-only")
         if self.platform == "ios" and op == "connect" and not (t.wda_host and t.wda_port):
             raise ValueError("iOS connect requires wda_host and wda_port")
         if op == "raw":
-            if self.platform in {"android", "harmony"} and not self.raw_command: raise ValueError("raw_command is required")
-            if self.platform == "ios" and not (self.raw_method and self.raw_endpoint): raise ValueError("iOS raw requires method and endpoint")
-        if op == "tap_locate" and not self.locate: raise ValueError("locate payload is required")
-        if op == "launch" and self.platform in {"android", "ios", "harmony"} and not t.app_uri: raise ValueError("app_uri is required")
+            if self.platform in {"android", "harmony"} and not self.raw_command:
+                raise ValueError("raw_command is required")
+            if self.platform == "ios" and not (self.raw_method and self.raw_endpoint):
+                raise ValueError("iOS raw requires method and endpoint")
+        if op == "tap_locate" and not self.locate:
+            raise ValueError("locate payload is required")
+        if op == "launch" and self.platform in {"android", "ios", "harmony"} and not t.app_uri:
+            raise ValueError("app_uri is required")
         return self
 
 
@@ -151,11 +182,17 @@ class AutomationResult(BaseModel):
 # Import after the request model is declared to avoid a circular import when
 # callers import ``loop_contracts`` directly.  Pydantic then resolves the
 # forward reference to the concrete LoopPlan type.
-from .loop_contracts import LoopPlan
+from .loop_contracts import LoopPlan  # noqa: E402
 
 AutomationRequest.model_rebuild()
 
 __all__ = [
-    "Platform", "Operation", "ReferenceImage", "Target", "AutomationRequest",
-    "Artifact", "StepResult", "AutomationResult",
+    "Platform",
+    "Operation",
+    "ReferenceImage",
+    "Target",
+    "AutomationRequest",
+    "Artifact",
+    "StepResult",
+    "AutomationResult",
 ]

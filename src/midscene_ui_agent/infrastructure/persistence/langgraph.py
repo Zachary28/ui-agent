@@ -1,4 +1,5 @@
 """Owned lifecycle for the official LangGraph SQLite checkpointer."""
+
 from __future__ import annotations
 
 from contextlib import AbstractContextManager

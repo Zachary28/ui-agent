@@ -19,13 +19,21 @@ class LoopScheduler:
         self._tick = 0
 
     def _now(self) -> float:
-        return self.clock.monotonic() if hasattr(self.clock, "monotonic") else self.clock()
+        monotonic = getattr(self.clock, "monotonic", None)
+        if callable(monotonic):
+            return float(monotonic())
+        if callable(self.clock):
+            return float(self.clock())
+        raise TypeError("clock must be callable or expose monotonic()")
 
     def start(self, operations: list[str], *, startup: list[str] | None = None) -> None:
         self.started_at = self._now()
         self.operations = list(dict.fromkeys(operations))
         startup_set = set(startup or ())
-        self.next_due = {name: self.started_at if name in startup_set else self.started_at + self.intervals.get(name, 5) for name in self.operations}
+        self.next_due = {
+            name: self.started_at if name in startup_set else self.started_at + self.intervals.get(name, 5)
+            for name in self.operations
+        }
 
     def due_operations(self) -> list[str]:
         now = self._now()
@@ -70,9 +78,14 @@ def scheduled_operations(plan: LoopPlan, state: dict[str, Any], *, now: float) -
             triggers.append(f"stall:{name}:{state.get('tick', 0)}")
         if config.at_runtime is not None and elapsed >= config.at_runtime and f"runtime:{name}" not in fired:
             triggers.append(f"runtime:{name}")
-        if last_operation in config.after_operation and f"after:{last_operation}:{name}:{state.get('tick', 0)}" not in fired:
+        if (
+            last_operation in config.after_operation
+            and f"after:{last_operation}:{name}:{state.get('tick', 0)}" not in fired
+        ):
             triggers.append(f"after:{last_operation}:{name}:{state.get('tick', 0)}")
-        interval_due = now >= float(next_due.get(name, now + (config.interval_seconds or plan.defaults.interval_seconds)))
+        interval_due = now >= float(
+            next_due.get(name, now + (config.interval_seconds or plan.defaults.interval_seconds))
+        )
         if triggers or interval_due:
             due.append(name)
             fired.update(triggers)

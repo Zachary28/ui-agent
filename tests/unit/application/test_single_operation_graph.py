@@ -64,8 +64,9 @@ def test_ui_action_connects_before_operation() -> None:
 
     calls: list[str] = []
     graph = build_single_operation_graph(
-        executor=lambda state, operation: calls.append(operation)
-        or {"phase": operation, "status": "succeeded", "message": ""}
+        executor=lambda state, operation: (
+            calls.append(operation) or {"phase": operation, "status": "succeeded", "message": ""}
+        )
     )
 
     graph.invoke({"request": {"operation": "screenshot"}})
@@ -80,8 +81,9 @@ def test_single_operation_subgraph_runs_inside_main_graph(tmp_path) -> None:
 
     calls: list[str] = []
     single = build_single_operation_graph(
-        executor=lambda state, operation: calls.append(operation)
-        or {"phase": operation, "status": "succeeded", "message": ""}
+        executor=lambda state, operation: (
+            calls.append(operation) or {"phase": operation, "status": "succeeded", "message": ""}
+        )
     )
     with sqlite_checkpointer(tmp_path / "main.sqlite") as checkpointer:
         graph = build_automation_graph(execution_graph=single, checkpointer=checkpointer)
@@ -235,9 +237,7 @@ def test_fresh_run_clears_all_checkpointed_result_and_cursor_fields(tmp_path) ->
     assert calls == ["connect"]
     assert result["operation_steps"] == ["connect"]
     assert result["step_index"] == 1
-    assert result["steps"] == [
-        {"phase": "connect", "status": "succeeded", "message": "fresh"}
-    ]
+    assert result["steps"] == [{"phase": "connect", "status": "succeeded", "message": "fresh"}]
     assert result["artifacts"] == []
     assert result["error"] is None
     assert result["secondary_errors"] == []

@@ -1,4 +1,5 @@
 """Discovery of configuration resources in source and wheel installs."""
+
 from importlib.resources import files
 from pathlib import Path
 

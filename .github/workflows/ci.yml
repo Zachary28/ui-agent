@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m compileall src -q
+      - run: python -m pytest -q
+      - run: python -m ruff check src tests
+      - run: python -m mypy src/midscene_ui_agent
+      - run: python -m build
+
+  installed-wheel:
+    runs-on: windows-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install build pytest
+      - run: python -m build --wheel
+      - shell: pwsh
+        run: |
+          $site = Join-Path $env:RUNNER_TEMP "wheel-site"
+          New-Item -ItemType Directory -Force $site | Out-Null
+          python -m pip install --target $site (Get-ChildItem dist/*.whl | Select-Object -First 1).FullName
+          "UI_AGENT_WHEEL_SITE=$site" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - run: python -m pytest tests/distribution/test_installed_cli.py -v

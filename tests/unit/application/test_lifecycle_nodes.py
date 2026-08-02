@@ -86,10 +86,9 @@ def test_single_operation_captures_before_and_after_evidence() -> None:
     evidence: list[tuple[str, str, str]] = []
     graph = build_single_operation_graph(
         executor=lambda state, operation: {"phase": operation, "status": "succeeded", "message": "ok"},
-        capture_evidence=lambda operation, operation_id, phase, state: evidence.append(
-            (operation, operation_id, phase)
-        )
-        or f"{operation_id}-{phase}.jpeg",
+        capture_evidence=lambda operation, operation_id, phase, state: (
+            evidence.append((operation, operation_id, phase)) or f"{operation_id}-{phase}.jpeg"
+        ),
     )
 
     result = graph.invoke({"run_id": "r1", "request": {"operation": "screenshot"}})

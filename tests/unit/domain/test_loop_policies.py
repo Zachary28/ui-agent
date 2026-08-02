@@ -18,4 +18,3 @@ def test_retry_policy_maps_blocking_reasons_without_retrying() -> None:
     assert policy.exit_reason("LOGIN_REQUIRED") == ExitReason.LOGIN_REQUIRED
     assert policy.exit_reason("purchase required") == ExitReason.PURCHASE_REQUIRED
     assert not policy.should_retry(attempt=1, max_attempts=3, reason="LOGIN_REQUIRED")
-

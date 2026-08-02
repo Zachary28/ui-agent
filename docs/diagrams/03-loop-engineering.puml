@@ -1,69 +1,58 @@
-﻿@startuml
+@startuml
 !theme plain
 skinparam defaultFontSize 13
+title Loop Engineering 执行、中断与恢复
 
-title Loop Engineering - 循环播放时序图\n(打开应用 → 播放视频 → 关闭弹窗 → 切换剧集)
+actor 用户
+participant Orchestrator as ORCH
+participant "Automation Graph" as MAIN
+participant "Loop Subgraph" as LOOP
+participant Scheduler as SCHED
+participant Selector as SELECT
+participant "Loop Runtime / Handler" as RUNTIME
+participant PlatformAdapter as ADAPTER
+participant ExitPolicy as EXIT
+database "LangGraph SQLite" as DB
 
-actor "用户" as user
-participant "Orchestrator" as orch
-participant "LoopWorkflow\n控制器" as loopwf
-participant "LoopScheduler\n调度器" as sched
-participant "OperationSelector\n选择器" as selector
-participant "Handlers\n(Popup/Ad/Playback/...) " as handlers
-participant "ExitPolicy\n退出策略" as exitp
-participant "PlatformAdapter\n平台适配器" as adapter
-database "RuntimeState\n运行时状态" as state
+用户 -> ORCH : run(request.loop, run_id)
+ORCH -> MAIN : invoke(initial state)
+MAIN -> LOOP : execute_route(plan)
 
-== 启动 ==
-user -> orch : run(request)\nrequest.loop = LoopPlan
-orch -> loopwf : run(loop_plan)
-
-loopwf -> sched : start(operations, startup=["play"])
-activate sched
-sched -> sched : 初始化调度表\n所有启动项 first_tick = now
-deactivate sched
-
-loopwf -> handlers : "Play"\n播放视频
-handlers --> loopwf : success
-
-== 主循环 ==
-loop 直到退出条件
-  loopwf -> loopwf : 更新 elapsed_seconds
-  
-  loopwf -> sched : due_operations()
-  sched --> loopwf : ["dismiss_popup", "check_playback"]
-  
-  loopwf -> selector : choose(due, state)
-  note right: 优先级: popup(100) > ad(90)\n> recover(80) > check(60)\n> switch(50) > scroll(40)
-  
-  selector -> state : 检测 popup_detected?
-  state --> selector : True
-  selector --> loopwf : "dismiss_popup"
-
-  loopwf -> handlers : handle(prompt)
-  activate handlers
-  handlers -> adapter : execute_prompt("关闭弹窗...")
-  adapter --> handlers : response
-  handlers -> handlers : 检查 LOGIN_REQUIRED?\nPURCHASE_REQUIRED?
-  handlers --> loopwf : OperationOutcome(succeeded, reason)
-  deactivate handlers
-
-  opt 需登录/付费
-    loopwf -> exitp : LOGIN_REQUIRED / PURCHASE_REQUIRED
-    exitp --> loopwf : should_exit=true
-  end
-
-  loopwf -> state : record_tick()
-  sched -> sched : mark_attempt()\nnext_due[op] = now + interval
-
-  loopwf -> exitp : evaluate(state, ...)
-  exitp -> state : 检查 MAX_RUNTIME? NO_PROGRESS?\nMAX_FAILURES? 等
-  state --> exitp : ...
-  exitp --> loopwf : should_exit?
+loop 每个 tick
+  LOOP -> ADAPTER : observe UI
+  ADAPTER --> LOOP : reachable/fingerprint/message
+  LOOP -> SCHED : 计算 interval/startup/popup/ad/stall/runtime/after_operation
+  SCHED --> LOOP : due_operations
+  LOOP -> SELECT : 按 priority 与运行状态选择
+  SELECT --> LOOP : operation + stable operation_id
+  LOOP -> DB : checkpoint before execute
+  LOOP -> RUNTIME : execute(operation, timeout, attempt)
+  RUNTIME -> ADAPTER : Midscene prompt/command
+  ADAPTER --> RUNTIME : outcome
+  RUNTIME --> LOOP : succeeded/reason/artifacts
+  LOOP -> EXIT : 计数、失败、无进展、阻塞、取消
+  EXIT --> LOOP : continue / retry / exit
+  LOOP -> DB : checkpoint after evaluation
 end
 
-== 退出 ==
-loopwf --> orch : LoopResult(status, summary, exit_reason)
-orch --> user : 结果 + 报告路径
+alt 进程在操作前后中断
+  用户 -> ORCH : run --resume same_run_id
+  ORCH -> DB : 读取 request + fingerprints
+  ORCH -> ORCH : 比较 config/profile/loop/skill/target
+  alt 指纹不匹配
+    ORCH --> 用户 : resume_invalid（不连接 UI）
+  else 指纹匹配
+    ORCH -> MAIN : invoke(None)
+    MAIN -> LOOP : 恢复 pending state
+    alt 非幂等操作可能已生效
+      LOOP -> ADAPTER : verify_effect(operation_id)
+      ADAPTER --> LOOP : effect_exists
+      LOOP -> LOOP : complete 或 retry
+    end
+  end
+end
 
+LOOP --> MAIN : loop_summary + exit_reason
+MAIN -> ADAPTER : disconnect/close
+MAIN --> 用户 : result + evidence + reports
 @enduml

@@ -1,6 +1,7 @@
 def test_exit_policy_reports_runtime_and_no_progress():
     from midscene_ui_agent.domain.policies.exit import ExitPolicy
     from midscene_ui_agent.domain.runtime.loop import RuntimeState
+
     state = RuntimeState(max_no_progress_ticks=2, elapsed_seconds=11)
     assert ExitPolicy().evaluate(state, max_runtime_seconds=10).reason == "max_runtime"
     state.elapsed_seconds = 1
@@ -11,6 +12,7 @@ def test_exit_policy_reports_runtime_and_no_progress():
 def test_exit_policy_handles_limits_and_cancel():
     from midscene_ui_agent.domain.policies.exit import ExitPolicy
     from midscene_ui_agent.domain.runtime.loop import RuntimeState
+
     state = RuntimeState(switch_count=3)
     assert ExitPolicy().evaluate(state, max_runtime_seconds=10, max_switches=3).reason == "max_switches"
     state.cancelled = True

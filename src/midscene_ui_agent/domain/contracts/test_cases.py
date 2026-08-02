@@ -1,4 +1,5 @@
 """Stable contracts exchanged by future test-script generators."""
+
 from __future__ import annotations
 
 from typing import Any, Literal

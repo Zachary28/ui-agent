@@ -1,9 +1,11 @@
 """Thin user-facing API facade delegating to application workflows."""
+
 from __future__ import annotations
 
 import hashlib
 import os
 from pathlib import Path
+from typing import Any
 
 from ..application.workflows.orchestrator import run as run_workflow
 from ..domain.contracts import AutomationRequest, AutomationResult, RunFingerprints
@@ -114,7 +116,7 @@ def resume_run(
     database = Path(report_dir) / "langgraph.sqlite"
     if not database.is_file():
         raise ValueError(f"checkpoint not found for run id: {resume_id}")
-    config = {"configurable": {"thread_id": resume_id}}
+    config: Any = {"configurable": {"thread_id": resume_id}}
     with sqlite_checkpointer(database) as checkpointer:
         checkpoint = checkpointer.saver.get_tuple(config)
     if checkpoint is None:
@@ -156,5 +158,6 @@ def resume_run(
         skills_root=skills_root,
         skills_lock=skills_lock,
     )
+
 
 __all__ = ["run", "run_configured", "resume_run"]

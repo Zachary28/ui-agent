@@ -1,55 +1,52 @@
-﻿@startuml
+@startuml
 !theme plain
 skinparam defaultFontSize 13
+title 配置解析、指纹与 Skill Lock
 
-title 配置分层与叠加
+actor 用户
+participant "CLI / run_configured" as ENTRY
+participant ConfigResolver as RESOLVER
+collections "Package Config" as PACKAGE
+collections "External Config Root" as EXTERNAL
+participant "Pydantic Contracts" as VALIDATE
+participant "Fingerprint Builder" as HASH
+participant "SkillCatalog" as SKILL
+participant Orchestrator as ORCH
 
-package "Layer 1: 全局默认" as L1 #E8F5E9 {
-  file "defaults.yaml" as def {
-    "interval_seconds: 5\noperations:\n  dismiss_popup:\n    enabled: true\n    interval: 2"
-  }
-}
+用户 -> ENTRY : platform + app + task\n[environment] [override]
+alt 未指定 config-root
+  ENTRY -> PACKAGE : importlib.resources/config
+else 指定 config-root
+  ENTRY -> EXTERNAL : 外部目录
+end
 
-package "Layer 2: 平台" as L2 #FFF3E0 {
-  file "platforms/android.yaml" as plat {
-    "extends: defaults\noperations:\n  dismiss_popup:\n    interval: 3\n  launch_app: {enabled: true}"
-  }
-  file "platforms/browser.yaml" as bplat #E3F2FD {
-    "url: https://...\nheadless: false"
-  }
-}
+ENTRY -> RESOLVER : resolve selectors
+RESOLVER -> RESOLVER : defaults
+RESOLVER -> RESOLVER : + platform
+RESOLVER -> RESOLVER : + app profile
+RESOLVER -> RESOLVER : + task
+RESOLVER -> RESOLVER : + environment
+RESOLVER -> RESOLVER : + dotted overrides
+RESOLVER -> RESOLVER : 校验 selector 身份与路径
+RESOLVER -> VALIDATE : AutomationRequest + LoopPlan
+VALIDATE --> ENTRY : canonical JSON data
+ENTRY -> HASH : config/profile/loop/target/skill lock
+HASH --> ENTRY : RunFingerprints
 
-package "Layer 3: 应用 Profile" as L3 #F3E5F5 {
-  file "apps/android/bilibili.yaml" as bili {
-    "extends: ../../platforms/android.yaml\napp:\n  package_name: tv.danmaku.bili\nui:\n  free_markers: [免费观看]"
-  }
-  file "apps/android/tencent-video.yaml" as tx {
-    "extends: ../../platforms/android.yaml\napp:\n  package_name: com.tencent.qqlive"
-  }
-}
+opt skills-root 已提供
+  ENTRY -> SKILL : selected platform + lock
+  SKILL -> SKILL : 校验必需文件 SHA-256
+  alt 缺文件或哈希不匹配
+    SKILL --> 用户 : failed（在 UI 前）
+  end
+end
 
-package "Layer 4: 任务" as L4 #FCE4EC {
-  file "tasks/watch-bilibili.yaml" as task {
-    "extends: ../../apps/android/bilibili.yaml\nloop:\n  operations:\n    switch_episode: {enabled: true}"
-  }
-}
+ENTRY -> ORCH : request + fingerprints
+ORCH --> 用户 : planned / succeeded / failed / resume_invalid
 
-package "Layer 5: CLI/API 覆盖" as L5 #E1F5FE {
-  [--override "loop.max_runtime=3600"] as cli
-}
-
-L1 --> L2 : 叠加
-L2 --> L3 : 叠加
-L3 --> L4 : 叠加
-L4 --> L5 : 最终覆盖
-
-note right of L5
-  <b>合并结果示例</b>
-  interval_seconds: 5 (默认)
-  dismiss_popup.interval: 3 (平台覆盖)
-  package_name: tv.danmaku.bili (app)
-  switch_episode.enabled: true (task)
-  max_runtime: 3600 (CLI 覆盖)
+note right of RESOLVER
+未知路径、schema 错误、selector 改写均拒绝。
+operation params 是开放 JSON mapping，
+但整个 LoopPlan 仍需通过校验。
 end note
-
 @enduml

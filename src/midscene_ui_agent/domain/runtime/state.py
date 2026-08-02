@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Any, TypedDict
 
+
 class RunState(TypedDict, total=False):
     request: dict[str, Any]
     # Present for loop runs; one-shot requests continue to use the existing

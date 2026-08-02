@@ -1,13 +1,14 @@
 """Checkpointable Loop Engineering LangGraph subgraph."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from langgraph.graph import END, START, StateGraph
 
-from ...domain.contracts import ExitReason, LoopPlan
+from ...domain.contracts import ExitReason, LoopPlan, OperationName
 from ...domain.policies.exit import ExitPolicy
 from ...domain.policies.resume import IDEMPOTENT_OPERATIONS, resume_action
 from ...domain.policies.retry import RetryPolicy
@@ -109,7 +110,9 @@ def build_loop_graph(
     def schedule_operations(state: LoopGraphState) -> dict[str, Any]:
         plan = LoopPlan.model_validate(state["plan"])
         due, updates = scheduled_operations(plan, dict(state), now=services.clock())
-        preview = _runtime_state({**state, **updates}, plan)
+        merged = dict(state)
+        merged.update(updates)
+        preview = _runtime_state(cast(LoopGraphState, merged), plan)
         decision = ExitPolicy().evaluate(
             preview,
             max_runtime_seconds=plan.exit_conditions.max_runtime_seconds,
@@ -125,8 +128,9 @@ def build_loop_graph(
     def select_operation(state: LoopGraphState) -> dict[str, Any]:
         plan = LoopPlan.model_validate(state["plan"])
         runtime = _runtime_state(state, plan)
-        priorities = {name: config.priority for name, config in plan.operations.items()}
-        selected = selector.choose(list(state.get("due_operations", [])), runtime, priorities)
+        priorities: dict[str, int] = {name: config.priority for name, config in plan.operations.items()}
+        due_operations = list(state.get("due_operations", []))
+        selected = selector.choose(due_operations, runtime, priorities)
         return {
             "selected_operation": selected,
             "operation_id": f"tick-{int(state.get('tick', 0)) + 1}:{selected}" if selected else None,
@@ -135,8 +139,11 @@ def build_loop_graph(
 
     def execute_operation(state: LoopGraphState) -> dict[str, Any]:
         plan = LoopPlan.model_validate(state["plan"])
-        operation = state["selected_operation"]
-        config = plan.operations[operation]
+        operation = state.get("selected_operation")
+        if not operation:
+            raise RuntimeError("selected operation is required")
+        operation_name = cast(OperationName, operation)
+        config = plan.operations[operation_name]
         attempt = int(state.get("selected_attempt", 0)) + 1
         timeout = float(config.timeout_seconds or plan.defaults.timeout_seconds)
         effect_verified = False
@@ -164,11 +171,12 @@ def build_loop_graph(
         }
 
     def record_evidence(phase: str, state: LoopGraphState) -> dict[str, Any]:
-        if services.record_evidence is None or not state.get("selected_operation"):
+        operation = state.get("selected_operation")
+        if services.record_evidence is None or not operation:
             return {}
         payload = state.get("observation", {}) if phase == "before" else state.get("last_outcome", {})
         refs = services.record_evidence(
-            state["selected_operation"],
+            operation,
             str(state.get("operation_id", "")),
             phase,
             payload,
@@ -211,7 +219,8 @@ def build_loop_graph(
             return updates
 
         if operation and outcome:
-            config = plan.operations[operation]
+            operation_name = cast(OperationName, operation)
+            config = plan.operations[operation_name]
             succeeded = bool(outcome.get("succeeded", False))
             attempt = int(state.get("selected_attempt", 0))
             if not succeeded and retry_policy.should_retry(
@@ -229,7 +238,9 @@ def build_loop_graph(
                 updates["consecutive_failures"] = 0
                 updates["switch_count"] = int(state.get("switch_count", 0)) + int(operation == "switch_episode")
                 updates["scroll_count"] = int(state.get("scroll_count", 0)) + int(operation == "scroll_feed")
-                updates["target_count"] = int(state.get("target_count", 0)) + int(operation in {"switch_episode", "scroll_feed"})
+                updates["target_count"] = int(state.get("target_count", 0)) + int(
+                    operation in {"switch_episode", "scroll_feed"}
+                )
             else:
                 failures[operation] = failures.get(operation, 0) + 1
                 updates["consecutive_failures"] = int(state.get("consecutive_failures", 0)) + 1
@@ -242,7 +253,9 @@ def build_loop_graph(
             next_due[operation] = services.clock() + float(config.interval_seconds or plan.defaults.interval_seconds)
             updates["next_due"] = next_due
 
-        runtime = _runtime_state({**state, **updates}, plan)
+        merged = dict(state)
+        merged.update(updates)
+        runtime = _runtime_state(cast(LoopGraphState, merged), plan)
         decision = ExitPolicy().evaluate(
             runtime,
             max_runtime_seconds=plan.exit_conditions.max_runtime_seconds,
@@ -276,7 +289,13 @@ def build_loop_graph(
             ExitReason.UNHANDLED_POPUP,
         }
         exit_reason = state.get("exit_reason")
-        status = "cancelled" if exit_reason == ExitReason.CANCELLED else "failed" if exit_reason in failure_reasons else "succeeded"
+        status = (
+            "cancelled"
+            if exit_reason == ExitReason.CANCELLED
+            else "failed"
+            if exit_reason in failure_reasons
+            else "succeeded"
+        )
         return {
             "status": status,
             "loop_summary": {
@@ -310,7 +329,9 @@ def build_loop_graph(
     builder.add_edge("initialize_loop", "observe_ui")
     builder.add_edge("observe_ui", "schedule_operations")
     builder.add_edge("schedule_operations", "select_operation")
-    builder.add_conditional_edges("select_operation", route_after_select, {"execute": "record_before_evidence", "evaluate": "evaluate_exit"})
+    builder.add_conditional_edges(
+        "select_operation", route_after_select, {"execute": "record_before_evidence", "evaluate": "evaluate_exit"}
+    )
     builder.add_edge("record_before_evidence", "execute_operation")
     builder.add_edge("execute_operation", "record_evidence")
     builder.add_edge("record_evidence", "evaluate_exit")

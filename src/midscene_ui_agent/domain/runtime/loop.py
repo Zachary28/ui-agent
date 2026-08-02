@@ -26,7 +26,9 @@ class RuntimeState:
 
     def record_tick(self, *, progress_fingerprint: str | None) -> None:
         self.current_tick += 1
-        if progress_fingerprint and (self.last_progress_fingerprint is None or progress_fingerprint == self.last_progress_fingerprint):
+        if progress_fingerprint and (
+            self.last_progress_fingerprint is None or progress_fingerprint == self.last_progress_fingerprint
+        ):
             self.no_progress_ticks += 1
         elif progress_fingerprint:
             self.no_progress_ticks = 0
@@ -43,10 +45,16 @@ class RuntimeState:
             self.operation_failures[operation] = self.operation_failures.get(operation, 0) + 1
 
     def snapshot(self) -> dict[str, Any]:
-        return {"current_tick": self.current_tick, "elapsed_seconds": self.elapsed_seconds,
-                "operation_attempts": dict(self.operation_attempts), "operation_failures": dict(self.operation_failures),
-                "switch_count": self.switch_count, "scroll_count": self.scroll_count,
-                "playback_elapsed_seconds": self.playback_elapsed_seconds, "no_progress_ticks": self.no_progress_ticks}
+        return {
+            "current_tick": self.current_tick,
+            "elapsed_seconds": self.elapsed_seconds,
+            "operation_attempts": dict(self.operation_attempts),
+            "operation_failures": dict(self.operation_failures),
+            "switch_count": self.switch_count,
+            "scroll_count": self.scroll_count,
+            "playback_elapsed_seconds": self.playback_elapsed_seconds,
+            "no_progress_ticks": self.no_progress_ticks,
+        }
 
 
 __all__ = ["RuntimeState"]

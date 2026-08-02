@@ -1,10 +1,11 @@
 """Graph node boundary for platform execution."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from ...domain.contracts import AutomationRequest, StepResult
 from ...domain.errors import UiAgentError
@@ -31,6 +32,7 @@ def execute_operation_step(
 ) -> JsonObject:
     """Execute one deterministic operation for the single-operation graph."""
     del state
+    status: Literal["succeeded", "failed"]
     try:
         if request.platform == "vitest_e2e" and operation in {"create", "update"}:
             lifecycle_adapter: Any = adapter

@@ -1,4 +1,5 @@
 """Graph-facing final result and report generation."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -59,15 +60,17 @@ def finalize_graph_reports(
                     secondary.append(f"REPORT_GENERATION_FAILED: {exc}")
 
     error = state.get("error") or next((step.message for step in steps if step.status == "failed"), None)
-    result = AutomationResult(
-        run_id=state["run_id"],
-        status=state.get("status", "failed"),
-        steps=steps if state.get("route") != "loop" else [],
-        artifacts=artifacts,
-        error=error,
-        secondary_errors=secondary,
-        loop_summary=state.get("loop_summary") if state.get("route") == "loop" else None,
-        exit_reason=state.get("exit_reason"),
+    result = AutomationResult.model_validate(
+        {
+            "run_id": state["run_id"],
+            "status": state.get("status", "failed"),
+            "steps": steps if state.get("route") != "loop" else [],
+            "artifacts": artifacts,
+            "error": error,
+            "secondary_errors": secondary,
+            "loop_summary": state.get("loop_summary") if state.get("route") == "loop" else None,
+            "exit_reason": state.get("exit_reason"),
+        }
     )
     result_path = write_result(result, root)
     manifest_path = build_manifest(

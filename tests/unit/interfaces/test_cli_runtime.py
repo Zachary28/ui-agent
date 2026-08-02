@@ -58,8 +58,9 @@ def test_cli_resume_passes_explicit_target_overrides(monkeypatch, tmp_path) -> N
     captured = {}
     monkeypatch.setattr(
         "midscene_ui_agent.interfaces.cli.resume_run",
-        lambda resume_id, **kwargs: captured.update(resume_id=resume_id, **kwargs)
-        or AutomationResult(run_id=resume_id, status="succeeded"),
+        lambda resume_id, **kwargs: (
+            captured.update(resume_id=resume_id, **kwargs) or AutomationResult(run_id=resume_id, status="succeeded")
+        ),
     )
 
     result = CliRunner().invoke(

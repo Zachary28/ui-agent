@@ -12,7 +12,16 @@ class ExitDecision:
 
 
 class ExitPolicy:
-    def evaluate(self, state: RuntimeState, *, max_runtime_seconds: float, max_switches: int | None = None, max_scrolls: int | None = None, target_count: int | None = None, max_consecutive_failures: int = 3) -> ExitDecision:
+    def evaluate(
+        self,
+        state: RuntimeState,
+        *,
+        max_runtime_seconds: float,
+        max_switches: int | None = None,
+        max_scrolls: int | None = None,
+        target_count: int | None = None,
+        max_consecutive_failures: int = 3,
+    ) -> ExitDecision:
         if getattr(state, "cancelled", False):
             return ExitDecision(True, ExitReason.CANCELLED)
         if state.elapsed_seconds >= max_runtime_seconds:

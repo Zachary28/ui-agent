@@ -1,4 +1,5 @@
 """Deterministic renderers for generated test-case contracts."""
+
 from __future__ import annotations
 
 import json
@@ -33,19 +34,19 @@ class PythonTestRenderer:
             "from midscene_ui_agent.interfaces.api import run\n\n\n"
             f"TEST_CASE = json.loads({payload!r})\n\n\n"
             f"def {function_name}():\n"
-            "    expected_status = \"planned\" if TEST_CASE[\"mode\"] == \"plan\" else \"succeeded\"\n"
-            "    for index, step in enumerate(TEST_CASE[\"steps\"], start=1):\n"
-            "        target = {**TEST_CASE[\"target\"], **step[\"target_overrides\"]}\n"
+            '    expected_status = "planned" if TEST_CASE["mode"] == "plan" else "succeeded"\n'
+            '    for index, step in enumerate(TEST_CASE["steps"], start=1):\n'
+            '        target = {**TEST_CASE["target"], **step["target_overrides"]}\n'
             "        request = AutomationRequest(\n"
-            "            platform=TEST_CASE[\"platform\"],\n"
+            '            platform=TEST_CASE["platform"],\n'
             "            target=target,\n"
-            "            goal=step[\"prompt\"],\n"
-            "            acceptance=[*TEST_CASE[\"assertions\"], *step[\"acceptance\"]],\n"
-            "            operation=step[\"action\"],\n"
-            "            mode=TEST_CASE[\"mode\"],\n"
+            '            goal=step["prompt"],\n'
+            '            acceptance=[*TEST_CASE["assertions"], *step["acceptance"]],\n'
+            '            operation=step["action"],\n'
+            '            mode=TEST_CASE["mode"],\n'
             "        )\n"
             "        result = run(request)\n"
-            "        assert result.status == expected_status, f\"step {index}: {result.status}\"\n"
+            '        assert result.status == expected_status, f"step {index}: {result.status}"\n'
         )
 
 

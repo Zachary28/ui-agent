@@ -1,4 +1,5 @@
 """Bind platform execution services to the Loop LangGraph subgraph."""
+
 from __future__ import annotations
 
 import time
@@ -6,9 +7,9 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event
-from typing import Any
+from typing import Any, cast
 
-from ...domain.contracts import AutomationRequest, ExitReason, LoopPlan
+from ...domain.contracts import AutomationRequest, ExitReason, LoopPlan, OperationName
 from ...infrastructure.execution.runner import CommandRunner
 from ...platforms.base import ExecutionContext
 from ...infrastructure.evidence.collector import EvidenceCollector
@@ -98,7 +99,12 @@ class LoopRuntime:
         )
 
     def _now(self) -> float:
-        return self.clock.monotonic() if hasattr(self.clock, "monotonic") else self.clock()
+        monotonic = getattr(self.clock, "monotonic", None)
+        if callable(monotonic):
+            return float(monotonic())
+        if callable(self.clock):
+            return float(self.clock())
+        raise TypeError("clock must be callable or expose monotonic()")
 
     def _wait(self, seconds: float) -> None:
         if hasattr(self.clock, "advance"):
@@ -132,7 +138,9 @@ class LoopRuntime:
 
     def _execute(self, operation: str, timeout: float, attempt: int, state) -> dict[str, Any]:
         del attempt
-        context = self._context(operation, timeout) if self.request is not None and hasattr(self.adapter, "command") else None
+        context = (
+            self._context(operation, timeout) if self.request is not None and hasattr(self.adapter, "command") else None
+        )
         plan = LoopPlan.model_validate(state["plan"])
         if operation == "dismiss_popup":
             prompt = plan.popup_prompts[0] if plan and plan.popup_prompts else "Close the ordinary popup"
@@ -147,10 +155,10 @@ class LoopRuntime:
         elif operation == "recover_playback":
             outcome = PlaybackController(self.adapter, context=context).recover()
         elif operation == "switch_episode":
-            config = plan.operations[operation] if plan else None
-            params = config.params if config else {}
+            config = plan.operations[cast(OperationName, operation)]
+            params = config.params
             outcome = EpisodeSwitcher(self.adapter, context=context).switch(
-                strategy=(config.strategy if config else None) or params.get("strategy", "next_episode"),
+                strategy=config.strategy or params.get("strategy", "next_episode"),
                 require_free=bool(params.get("require_free", False)),
                 category=params.get("category"),
             )
@@ -173,7 +181,7 @@ class LoopRuntime:
         del state
         if self.request is None or not hasattr(self.adapter, "verify_effect"):
             return False
-        config = self.request.loop.operations.get(operation) if self.request.loop else None
+        config = self.request.loop.operations.get(cast(OperationName, operation)) if self.request.loop else None
         timeout = config.timeout_seconds if config and config.timeout_seconds else self.request.timeout_seconds
         return bool(self.adapter.verify_effect(operation, operation_id, self._context(operation, timeout)))
 

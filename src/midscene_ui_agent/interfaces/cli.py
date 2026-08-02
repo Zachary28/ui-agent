@@ -1,8 +1,10 @@
 """Typer command-line interface for direct and configured UI automation."""
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -62,7 +64,7 @@ def run_command(
             raise ValueError("--image and --image-name must be paired")
 
         configured = any(value is not None for value in (app_name, task, config_root, environment)) or bool(override)
-        target_overrides = {
+        target_overrides: dict[str, Any] = {
             key: value
             for key, value in {
                 "url": url,
@@ -84,6 +86,7 @@ def run_command(
             raise ValueError("--platform, --app and --task are required when resuming with configuration selectors")
         resume_only = resume_id is not None and not any(selectors)
         if resume_only:
+            assert resume_id is not None
             if environment is not None or override:
                 raise ValueError("--platform, --app and --task are required when resuming with config overrides")
             result = resume_run(
@@ -128,20 +131,22 @@ def run_command(
                 ReferenceImage(name=name, source=source) for source, name in zip(image, image_name)
             ]
             locate = json.loads(locate_json) if locate_json else None
-            request = AutomationRequest(
-                platform=platform,
-                target=target_overrides,
-                goal=goal,
-                operation=operation,
-                mode=mode or "plan",
-                report_dir=report_dir,
-                run_id=run_id,
-                raw_command=raw_command,
-                raw_method=raw_method,
-                raw_endpoint=raw_endpoint,
-                locate=locate,
-                deep_think=deep_think,
-                deep_locate=deep_locate,
+            request = AutomationRequest.model_validate(
+                {
+                    "platform": platform,
+                    "target": target_overrides,
+                    "goal": goal,
+                    "operation": operation,
+                    "mode": mode or "plan",
+                    "report_dir": report_dir,
+                    "run_id": run_id,
+                    "raw_command": raw_command,
+                    "raw_method": raw_method,
+                    "raw_endpoint": raw_endpoint,
+                    "locate": locate,
+                    "deep_think": deep_think,
+                    "deep_locate": deep_locate,
+                }
             )
             result = execute(request, skills_root=skills_root, skills_lock=skills_lock)
 
@@ -167,14 +172,16 @@ def vitest(
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     result = execute(
-        AutomationRequest(
-            platform="vitest_e2e",
-            target={"project_dir": project_dir, "vitest_platform": vitest_platform},
-            goal=goal,
-            operation=operation,
-            mode=mode,
-            report_dir=report_dir,
-            test_name=test_name,
+        AutomationRequest.model_validate(
+            {
+                "platform": "vitest_e2e",
+                "target": {"project_dir": project_dir, "vitest_platform": vitest_platform},
+                "goal": goal,
+                "operation": operation,
+                "mode": mode,
+                "report_dir": report_dir,
+                "test_name": test_name,
+            }
         )
     )
     typer.echo(result.model_dump_json() if json_output else f"{result.status}: {result.run_id}")
