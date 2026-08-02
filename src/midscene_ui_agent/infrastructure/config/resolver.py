@@ -9,6 +9,10 @@ from typing import Any
 
 import yaml
 
+from ...domain.contracts import LoopPlan
+
+_SELECTOR_FIELDS = frozenset({"platform", "id", "profile"})
+
 
 def parse_overrides(items: list[str]) -> dict[str, Any]:
     """Parse repeatable dotted key=value overrides into a nested mapping."""
@@ -44,14 +48,69 @@ class ConfigResolver:
                 environment: str | None = None,
                 overrides: dict[str, Any] | None = None) -> dict[str, Any]:
         result = self._load_required(self.root / "defaults.yaml")
-        result = self._merge(result, self._load_required(self.root / "platforms" / f"{platform}.yaml"))
-        result = self._merge(result, self._load_profile(app))
-        result = self._merge(result, self._load_required(self.root / "tasks" / f"{task}.yaml"))
+        platform_config = self._load_required(self.root / "platforms" / f"{platform}.yaml")
+        profile_config = self._load_profile(app)
+        task_config = self._load_required(self.root / "tasks" / f"{task}.yaml")
+        self._validate_selectors(
+            platform=platform,
+            app=app,
+            platform_config=platform_config,
+            profile_config=profile_config,
+            task_config=task_config,
+        )
+        result = self._merge(result, platform_config)
+        result = self._merge(result, profile_config)
+        result = self._merge(result, task_config)
         if environment:
             result = self._merge(result, self._load_required(self.root / "environments" / f"{environment}.yaml"))
+        self._validate_resolved_selectors(result, platform=platform, app=app)
         if overrides:
-            self._validate_override_paths(result, overrides)
-            result = self._merge(result, copy.deepcopy(overrides))
+            result = self.apply_overrides(result, overrides)
+        return result
+
+    @staticmethod
+    def _validate_selectors(
+        *,
+        platform: str,
+        app: str,
+        platform_config: dict[str, Any],
+        profile_config: dict[str, Any],
+        task_config: dict[str, Any],
+    ) -> None:
+        if platform_config.get("platform") != platform:
+            raise ValueError(f"platform configuration does not match selector: {platform}")
+        if profile_config.get("id") != app:
+            raise ValueError(f"profile id does not match selector: {app}")
+        if profile_config.get("platform") != platform:
+            raise ValueError(f"profile platform does not match selector: {platform}")
+        if task_config.get("profile") != app:
+            raise ValueError(f"task profile does not match selector: {app}")
+
+    @staticmethod
+    def _validate_resolved_selectors(resolved: dict[str, Any], *, platform: str, app: str) -> None:
+        if resolved.get("platform") != platform:
+            raise ValueError(f"resolved platform does not match selector: {platform}")
+        if resolved.get("id") != app:
+            raise ValueError(f"resolved profile id does not match selector: {app}")
+        if resolved.get("profile") != app:
+            raise ValueError(f"resolved task profile does not match selector: {app}")
+
+    @classmethod
+    def apply_overrides(cls, base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
+        """Apply overrides after validating closed mappings and the complete Loop schema."""
+        changed_selectors = _SELECTOR_FIELDS.intersection(overrides)
+        if changed_selectors:
+            fields = ", ".join(sorted(changed_selectors))
+            raise ValueError(f"selector fields cannot be overridden: {fields}")
+        non_loop = {key: value for key, value in overrides.items() if key != "loop"}
+        if non_loop:
+            cls._validate_override_paths(base, non_loop)
+        result = cls._merge(base, copy.deepcopy(overrides))
+        if "loop" in overrides:
+            try:
+                LoopPlan.model_validate(result.get("loop", {}))
+            except ValueError as exc:
+                raise ValueError(f"unknown override path or invalid value under loop: {exc}") from exc
         return result
 
     @classmethod

@@ -11,6 +11,12 @@ from ...infrastructure.config.resolver import ConfigResolver, parse_overrides
 from ...infrastructure.config.resources import default_config_root, default_skill_lock_path
 
 
+_GOAL_OPTION_OPERATIONS = {
+    "category": ("switch_episode",),
+    "require_free": ("switch_episode",),
+}
+
+
 def resolve_run_config(
     *,
     platform: str,
@@ -28,15 +34,20 @@ def resolve_run_config(
 ) -> ResolvedRunConfig:
     root = Path(config_root) if config_root is not None else default_config_root()
     override_mapping = parse_overrides(overrides) if isinstance(overrides, list) else overrides
-    resolved = ConfigResolver(root).resolve(
+    resolver = ConfigResolver(root)
+    resolved = resolver.resolve(
         platform=platform,
         app=app,
         task=task,
         environment=environment,
-        overrides=override_mapping,
     )
     goal, goal_options = _resolve_goal(resolved.get("goal"))
     loop_payload = _resolve_loop(resolved, goal_options)
+    if loop_payload is not None:
+        resolved["loop"] = loop_payload
+    if override_mapping:
+        resolved = resolver.apply_overrides(resolved, override_mapping)
+    loop_payload = _validated_loop(resolved)
     target = _resolve_target(platform, resolved.get("app", {}), target_overrides or {})
     request = AutomationRequest.model_validate(
         {
@@ -82,11 +93,24 @@ def _resolve_loop(resolved: dict[str, Any], goal_options: dict[str, Any]) -> dic
     if isinstance(ui, dict):
         loop.setdefault("popup_prompts", copy.deepcopy(ui.get("popup_prompts", [])))
         loop.setdefault("ad_prompts", copy.deepcopy(ui.get("ad_prompts", [])))
-    if goal_options:
-        switch = loop.setdefault("operations", {}).get("switch_episode")
-        if isinstance(switch, dict):
-            switch.setdefault("params", {}).update(goal_options)
+    operations = loop.setdefault("operations", {})
+    for option, value in goal_options.items():
+        operation_names = _GOAL_OPTION_OPERATIONS.get(option)
+        if operation_names is None:
+            raise ValueError(f"unsupported structured goal field: {option}")
+        matches = [operations.get(name) for name in operation_names if isinstance(operations.get(name), dict)]
+        if not matches:
+            raise ValueError(f"structured goal field has no applicable operation: {option}")
+        for operation in matches:
+            operation.setdefault("params", {})[option] = copy.deepcopy(value)
     return LoopPlan.model_validate(loop).model_dump(mode="json")
+
+
+def _validated_loop(resolved: dict[str, Any]) -> dict[str, Any] | None:
+    raw = resolved.get("loop")
+    if not isinstance(raw, dict):
+        return None
+    return LoopPlan.model_validate(raw).model_dump(mode="json")
 
 
 def _resolve_target(platform: str, app: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:

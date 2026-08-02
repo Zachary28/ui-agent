@@ -106,6 +106,82 @@ def test_unknown_override_path_is_rejected(config_tree: Path) -> None:
         )
 
 
+def test_schema_valid_optional_and_open_mapping_overrides_are_allowed(config_tree: Path) -> None:
+    from midscene_ui_agent.application.nodes.config import resolve_run_config
+
+    configured = resolve_run_config(
+        platform="android",
+        app="android.test",
+        task="watch",
+        config_root=config_tree,
+        target_overrides={"device_id": "fake"},
+        overrides=[
+            "loop.exit_conditions.max_runtime_seconds=12",
+            "loop.operations.switch_episode.timeout_seconds=10",
+            "loop.operations.switch_episode.params.require_free=false",
+        ],
+    )
+
+    assert configured.request.loop.exit_conditions.max_runtime_seconds == 12
+    switch = configured.request.loop.operations["switch_episode"]
+    assert switch.timeout_seconds == 10
+    assert switch.params["require_free"] is False
+
+
+@pytest.mark.parametrize(
+    ("platform", "app", "task", "message"),
+    [
+        ("android", "android.test", "wrong-profile", "task profile"),
+        ("browser", "android.test", "watch", "profile platform"),
+    ],
+)
+def test_selector_identity_mismatches_are_rejected(
+    config_tree: Path,
+    platform: str,
+    app: str,
+    task: str,
+    message: str,
+) -> None:
+    from midscene_ui_agent.infrastructure.config import ConfigResolver
+
+    if task == "wrong-profile":
+        _write(
+            config_tree / "tasks" / "wrong-profile.yaml",
+            "profile: android.other\ngoal: {prompt: Watch}\n",
+        )
+    if platform == "browser":
+        _write(config_tree / "platforms" / "browser.yaml", "platform: browser\n")
+
+    with pytest.raises(ValueError, match=message):
+        ConfigResolver(config_tree).resolve(platform=platform, app=app, task=task)
+
+
+def test_environment_cannot_change_selector_identity(config_tree: Path) -> None:
+    from midscene_ui_agent.infrastructure.config import ConfigResolver
+
+    _write(config_tree / "environments" / "wrong.yaml", "platform: browser\n")
+
+    with pytest.raises(ValueError, match="resolved platform"):
+        ConfigResolver(config_tree).resolve(
+            platform="android",
+            app="android.test",
+            task="watch",
+            environment="wrong",
+        )
+
+
+def test_runtime_override_cannot_change_selector_identity(config_tree: Path) -> None:
+    from midscene_ui_agent.infrastructure.config import ConfigResolver, parse_overrides
+
+    with pytest.raises(ValueError, match="selector fields cannot be overridden"):
+        ConfigResolver(config_tree).resolve(
+            platform="android",
+            app="android.test",
+            task="watch",
+            overrides=parse_overrides(["platform=browser"]),
+        )
+
+
 def test_task_goal_builds_request_and_updates_loop_params(config_tree: Path) -> None:
     from midscene_ui_agent.application.nodes.config import resolve_run_config
 
@@ -123,3 +199,18 @@ def test_task_goal_builds_request_and_updates_loop_params(config_tree: Path) -> 
     assert switch.params["category"] == "television_series"
     assert switch.params["require_free"] is True
     assert all(configured.fingerprints.model_dump().values())
+
+
+def test_runtime_override_wins_over_structured_goal(config_tree: Path) -> None:
+    from midscene_ui_agent.application.nodes.config import resolve_run_config
+
+    configured = resolve_run_config(
+        platform="android",
+        app="android.test",
+        task="watch",
+        config_root=config_tree,
+        target_overrides={"device_id": "fake"},
+        overrides=["loop.operations.switch_episode.params.require_free=false"],
+    )
+
+    assert configured.request.loop.operations["switch_episode"].params["require_free"] is False
