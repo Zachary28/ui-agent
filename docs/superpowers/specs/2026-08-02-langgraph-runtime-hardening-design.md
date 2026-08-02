@@ -87,6 +87,7 @@ CLI 新增：
 - `--environment`
 - 可重复的 `--override key=value`
 - `--skills-lock`
+- `--skills-root`（也可由 `MIDSCENE_SKILLS_ROOT` 提供）
 - 保留并实现 `--resume <run_id>`
 
 合并顺序固定为：
@@ -104,6 +105,8 @@ CLI 新增：
 - `loop_plan_hash`
 - `skill_lock_hash`
 - `target_fingerprint`
+
+任务配置中的目标统一使用 `goal.prompt` 作为传给 Midscene 的自然语言目标；`goal.category`、`goal.require_free` 等结构化字段转换为 Loop 操作参数。旧任务文件在迁移时补齐 `goal.prompt`，不在运行时隐式猜测目标文本。
 
 所有配置文件和 JSON schema 必须作为 Python package data 打入 wheel。源代码运行和 wheel 安装后的默认配置定位规则必须一致。
 
@@ -179,7 +182,7 @@ CLI 新增：
 
 `EvidenceCollector` 通过图节点接入，不由 handler 自行决定目录结构。manifest 包含配置指纹、图阶段、checkpoint thread_id、Loop 汇总和退出原因。
 
-技能锁在 `connect_platform` 前强制验证。锁文件不存在、hash 不一致或技能文件缺失均产生明确错误，不连接设备。
+技能锁在 `connect_platform` 前强制验证。技能根目录来自 `--skills-root` 或 `MIDSCENE_SKILLS_ROOT`；锁文件不存在、根目录缺失、hash 不一致或技能文件缺失均产生明确错误，不连接设备。
 
 ## 8. 平台层
 
