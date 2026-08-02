@@ -1,7 +1,8 @@
-from midscene_ui_agent.application.workflows.graph import runtime_checkpointer
-from midscene_ui_agent.infrastructure.persistence.checkpoint import SqliteCheckpoint
+from midscene_ui_agent.infrastructure.persistence.langgraph import sqlite_checkpointer
 
-def test_runtime_checkpointer_has_durable_fallback(tmp_path):
-    saver=runtime_checkpointer(tmp_path/"c.sqlite")
-    assert saver is not None
-    if isinstance(saver,SqliteCheckpoint): saver.close()
+def test_runtime_checkpointer_is_official_sqlite_saver(tmp_path):
+    handle = sqlite_checkpointer(tmp_path / "c.sqlite")
+    try:
+        assert handle.saver.__class__.__name__ == "SqliteSaver"
+    finally:
+        handle.close()
