@@ -79,13 +79,20 @@ def run_command(
             if value is not None
         }
 
-        resume_only = resume_id is not None and not any((platform, app_name, task))
+        selectors = (platform, app_name, task)
+        if resume_id is not None and any(selectors) and not all(selectors):
+            raise ValueError("--platform, --app and --task are required when resuming with configuration selectors")
+        resume_only = resume_id is not None and not any(selectors)
         if resume_only:
+            if environment is not None or override:
+                raise ValueError("--platform, --app and --task are required when resuming with config overrides")
             result = resume_run(
                 resume_id,
                 report_dir=report_dir,
                 skills_root=skills_root,
                 skills_lock=skills_lock,
+                target_overrides=target_overrides,
+                goal=goal,
             )
         elif configured:
             if not (platform and app_name and task):
@@ -105,6 +112,7 @@ def run_command(
                 operation=operation,
                 report_dir=report_dir,
                 run_id=run_id,
+                goal=goal,
             )
         elif resume_id is not None:
             result = resume_run(

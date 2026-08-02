@@ -1,4 +1,5 @@
 ﻿from __future__ import annotations
+import hashlib
 import json, uuid
 import os
 from functools import partial
@@ -36,7 +37,7 @@ def _request_fingerprints(request: AutomationRequest) -> RunFingerprints:
             }
         ),
         loop_plan_hash=ConfigResolver.canonical_hash(payload.get("loop") or {}),
-        skill_lock_hash=ConfigResolver.canonical_hash(lock.read_text(encoding="utf-8")),
+        skill_lock_hash=hashlib.sha256(lock.read_bytes()).hexdigest(),
         target_fingerprint=ConfigResolver.canonical_hash(request.target.model_dump(mode="json")),
     )
 

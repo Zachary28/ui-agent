@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+
 from midscene_ui_agent.domain.contracts import AutomationRequest, RunFingerprints
 from midscene_ui_agent.infrastructure.execution.runner import CommandResult
 
@@ -71,6 +73,15 @@ def test_non_idempotent_resume_uses_effect_verification() -> None:
     assert resume_action("switch_episode", effect_verified=True) == "complete"
     assert resume_action("switch_episode", effect_verified=False) == "retry"
     assert resume_action("screenshot", effect_verified=True) == "retry"
+
+
+def test_direct_request_uses_raw_skill_lock_hash(tmp_path) -> None:
+    from midscene_ui_agent.application.workflows.orchestrator import _request_fingerprints
+    from midscene_ui_agent.infrastructure.config.resources import default_skill_lock_path
+
+    expected = hashlib.sha256(default_skill_lock_path().read_bytes()).hexdigest()
+
+    assert _request_fingerprints(_request(tmp_path)).skill_lock_hash == expected
 
 
 def test_interrupted_single_operation_resumes_at_next_checkpoint(tmp_path) -> None:

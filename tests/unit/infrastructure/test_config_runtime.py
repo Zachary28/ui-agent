@@ -214,3 +214,67 @@ def test_runtime_override_wins_over_structured_goal(config_tree: Path) -> None:
     )
 
     assert configured.request.loop.operations["switch_episode"].params["require_free"] is False
+
+
+def test_goal_prompt_override_updates_request(config_tree: Path) -> None:
+    from midscene_ui_agent.application.nodes.config import resolve_run_config
+
+    configured = resolve_run_config(
+        platform="android",
+        app="android.test",
+        task="watch",
+        config_root=config_tree,
+        overrides=["goal.prompt=OVERRIDDEN"],
+        target_overrides={"device_id": "fake"},
+    )
+
+    assert configured.request.goal == "OVERRIDDEN"
+
+
+def test_explicit_goal_fills_missing_task_goal(config_tree: Path) -> None:
+    from midscene_ui_agent.application.nodes.config import resolve_run_config
+
+    _write(
+        config_tree / "tasks" / "watch.yaml",
+        """
+profile: android.test
+loop:
+  operations:
+    switch_episode: {enabled: true, strategy: next_episode, interval_seconds: 30}
+""",
+    )
+
+    configured = resolve_run_config(
+        platform="android",
+        app="android.test",
+        task="watch",
+        config_root=config_tree,
+        goal="CLI fallback goal",
+        target_overrides={"device_id": "fake"},
+    )
+
+    assert configured.request.goal == "CLI fallback goal"
+
+
+def test_explicit_fallback_goal_changes_config_fingerprint(config_tree: Path) -> None:
+    from midscene_ui_agent.application.nodes.config import resolve_run_config
+
+    _write(config_tree / "tasks" / "watch.yaml", "profile: android.test\n")
+    first = resolve_run_config(
+        platform="android",
+        app="android.test",
+        task="watch",
+        config_root=config_tree,
+        goal="Goal A",
+        target_overrides={"device_id": "fake"},
+    )
+    second = resolve_run_config(
+        platform="android",
+        app="android.test",
+        task="watch",
+        config_root=config_tree,
+        goal="Goal B",
+        target_overrides={"device_id": "fake"},
+    )
+
+    assert first.fingerprints.config_hash != second.fingerprints.config_hash

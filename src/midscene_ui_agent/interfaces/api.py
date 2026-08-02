@@ -1,6 +1,7 @@
 """Thin user-facing API facade delegating to application workflows."""
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from ..application.workflows.orchestrator import run as run_workflow
 from ..domain.contracts import AutomationRequest, AutomationResult, RunFingerprints
 from ..infrastructure.execution.runner import CommandRunner
 from ..application.nodes.config import resolve_run_config
+from ..infrastructure.config.resolver import ConfigResolver
 from ..infrastructure.persistence.langgraph import sqlite_checkpointer
 
 
@@ -67,6 +69,7 @@ def run_configured(
     operation: str = "run",
     report_dir: str | None = None,
     run_id: str | None = None,
+    goal: str | None = None,
     runner: CommandRunner | None = None,
     adapters=None,
 ) -> AutomationResult:
@@ -84,6 +87,7 @@ def run_configured(
         report_dir=report_dir,
         run_id=resume_id or run_id,
         skill_lock_path=skills_lock,
+        goal=goal,
     )
     return run(
         configured.request,
@@ -102,6 +106,8 @@ def resume_run(
     report_dir: str | Path = "./artifacts",
     skills_root: str | Path | None = None,
     skills_lock: str | Path | None = None,
+    target_overrides: dict | None = None,
+    goal: str | None = None,
     runner: CommandRunner | None = None,
     adapters=None,
 ) -> AutomationResult:
@@ -116,10 +122,31 @@ def resume_run(
     values = checkpoint.checkpoint.get("channel_values", {})
     if not values.get("request") or not values.get("fingerprints"):
         raise ValueError(f"checkpoint metadata is incomplete for run id: {resume_id}")
-    request = AutomationRequest.model_validate(values["request"]).model_copy(
-        update={"run_id": resume_id, "report_dir": str(report_dir), "mode": "live"}
+    stored_request = AutomationRequest.model_validate(values["request"])
+    target = stored_request.target.model_dump(mode="json")
+    target.update(target_overrides or {})
+    request = AutomationRequest.model_validate(
+        {
+            **stored_request.model_dump(mode="json"),
+            "target": target,
+            "goal": goal.strip() if goal and goal.strip() else stored_request.goal,
+            "run_id": resume_id,
+            "report_dir": str(report_dir),
+            "mode": "live",
+        }
     )
     fingerprints = RunFingerprints.model_validate(values["fingerprints"])
+    fingerprint_updates = {}
+    if target_overrides:
+        fingerprint_updates["target_fingerprint"] = ConfigResolver.canonical_hash(target)
+    if goal and goal.strip() and goal.strip() != stored_request.goal:
+        fingerprint_updates["config_hash"] = ConfigResolver.canonical_hash(
+            {"previous": fingerprints.config_hash, "goal": goal.strip()}
+        )
+    if skills_lock is not None:
+        fingerprint_updates["skill_lock_hash"] = hashlib.sha256(Path(skills_lock).read_bytes()).hexdigest()
+    if fingerprint_updates:
+        fingerprints = fingerprints.model_copy(update=fingerprint_updates)
     return run(
         request,
         runner=runner,

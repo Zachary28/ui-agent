@@ -31,6 +31,7 @@ def resolve_run_config(
     report_dir: str | None = None,
     run_id: str | None = None,
     skill_lock_path: str | Path | None = None,
+    goal: str | None = None,
 ) -> ResolvedRunConfig:
     root = Path(config_root) if config_root is not None else default_config_root()
     override_mapping = parse_overrides(overrides) if isinstance(overrides, list) else overrides
@@ -41,19 +42,25 @@ def resolve_run_config(
         task=task,
         environment=environment,
     )
-    goal, goal_options = _resolve_goal(resolved.get("goal"))
+    if override_mapping:
+        resolved = resolver.apply_overrides(resolved, override_mapping)
+    try:
+        resolved_goal, goal_options = _resolve_goal(resolved.get("goal"))
+    except ValueError:
+        if not goal or not goal.strip():
+            raise
+        resolved_goal, goal_options = goal.strip(), {}
+        resolved["goal"] = {"prompt": resolved_goal}
     loop_payload = _resolve_loop(resolved, goal_options)
     if loop_payload is not None:
         resolved["loop"] = loop_payload
-    if override_mapping:
-        resolved = resolver.apply_overrides(resolved, override_mapping)
     loop_payload = _validated_loop(resolved)
     target = _resolve_target(platform, resolved.get("app", {}), target_overrides or {})
     request = AutomationRequest.model_validate(
         {
             "platform": platform,
             "target": target,
-            "goal": goal,
+            "goal": resolved_goal,
             "operation": operation,
             "mode": mode,
             "report_dir": report_dir or resolved.get("artifacts_dir", "./artifacts"),
@@ -102,7 +109,7 @@ def _resolve_loop(resolved: dict[str, Any], goal_options: dict[str, Any]) -> dic
         if not matches:
             raise ValueError(f"structured goal field has no applicable operation: {option}")
         for operation in matches:
-            operation.setdefault("params", {})[option] = copy.deepcopy(value)
+            operation.setdefault("params", {}).setdefault(option, copy.deepcopy(value))
     return LoopPlan.model_validate(loop).model_dump(mode="json")
 
 
