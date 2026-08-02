@@ -173,3 +173,80 @@ def test_fresh_run_reusing_failed_run_id_clears_checkpointed_error(tmp_path) -> 
         "run",
         "screenshot",
     ]
+
+
+def test_fresh_run_clears_all_checkpointed_result_and_cursor_fields(tmp_path) -> None:
+    from midscene_ui_agent.application.graphs.single_operation import build_single_operation_graph
+    from midscene_ui_agent.infrastructure.persistence.langgraph import sqlite_checkpointer
+
+    calls: list[str] = []
+
+    def execute(state, operation):
+        calls.append(operation)
+        return {"phase": operation, "status": "succeeded", "message": "fresh"}
+
+    with sqlite_checkpointer(tmp_path / "fresh-state.sqlite") as checkpointer:
+        graph = build_single_operation_graph(executor=execute, checkpointer=checkpointer)
+        config = {"configurable": {"thread_id": "r1"}}
+        resumed = graph.invoke(
+            {
+                "run_id": "r1",
+                "thread_id": "r1",
+                "request": {"operation": "connect"},
+                "resume": True,
+                "operation_steps": ["connect"],
+                "step_index": 1,
+                "steps": [{"phase": "old", "status": "failed"}],
+                "artifacts": [{"kind": "report", "path": "old.html"}],
+                "error": "old error",
+                "secondary_errors": ["old secondary error"],
+                "status": "failed",
+                "exit_reason": "max_runtime",
+                "release_attempted": True,
+                "resources_released": True,
+                "resource_release_state": {"browser": "closed"},
+                "report_path": "old-report",
+                "result_path": "old-result.json",
+                "manifest_path": "old-manifest.json",
+                "events_path": "old-events.jsonl",
+            },
+            config=config,
+        )
+        result = graph.invoke(
+            {
+                "run_id": "r1",
+                "thread_id": "r1",
+                "request": {"operation": "connect"},
+                "resume": False,
+            },
+            config=config,
+        )
+
+    assert resumed["artifacts"] == [{"kind": "report", "path": "old.html"}]
+    assert resumed["secondary_errors"] == ["old secondary error"]
+    assert resumed["exit_reason"] == "max_runtime"
+    assert resumed["release_attempted"] is True
+    assert resumed["resources_released"] is True
+    assert resumed["resource_release_state"] == {"browser": "closed"}
+    assert resumed["report_path"] == "old-report"
+    assert resumed["result_path"] == "old-result.json"
+    assert resumed["manifest_path"] == "old-manifest.json"
+    assert resumed["events_path"] == "old-events.jsonl"
+    assert calls == ["connect"]
+    assert result["operation_steps"] == ["connect"]
+    assert result["step_index"] == 1
+    assert result["steps"] == [
+        {"phase": "connect", "status": "succeeded", "message": "fresh"}
+    ]
+    assert result["artifacts"] == []
+    assert result["error"] is None
+    assert result["secondary_errors"] == []
+    assert result["status"] == "succeeded"
+    assert result["exit_reason"] is None
+    assert result["release_attempted"] is False
+    assert result["resources_released"] is False
+    assert result["resource_release_state"] == {}
+    assert result["report_path"] == ""
+    assert result["result_path"] == ""
+    assert result["manifest_path"] == ""
+    assert result["events_path"] == ""

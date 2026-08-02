@@ -29,7 +29,7 @@ def build_single_operation_graph(
         request = state.get("request", {})
         operation = str(request.get("operation", "run"))
         resume = state.get("resume", False)
-        return {
+        updates: dict[str, Any] = {
             "operation_steps": operation_steps(operation),
             "step_index": state.get("step_index", 0) if resume else 0,
             "steps": list(state.get("steps", [])) if resume else [],
@@ -37,6 +37,20 @@ def build_single_operation_graph(
             "phase": "prepare_operation",
             "status": "running",
         }
+        if not resume:
+            updates.update(
+                artifacts=[],
+                secondary_errors=[],
+                exit_reason=None,
+                release_attempted=False,
+                resources_released=False,
+                resource_release_state={},
+                report_path="",
+                result_path="",
+                manifest_path="",
+                events_path="",
+            )
+        return updates
 
     def execute_step(state: AutomationGraphState) -> dict[str, Any]:
         index = state.get("step_index", 0)
