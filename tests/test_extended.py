@@ -1,7 +1,7 @@
 from pathlib import Path
 from midscene_ui_agent.domain.contracts import AutomationRequest
 from midscene_ui_agent.interfaces.api import run
-from midscene_ui_agent.adapters.vitest_e2e import VitestE2EAdapter
+from midscene_ui_agent.platforms.vitest_e2e import VitestE2EAdapter
 from midscene_ui_agent.infrastructure.reporting.reports import discover_native_report
 
 def test_plan_writes_manifest_and_result(tmp_path):

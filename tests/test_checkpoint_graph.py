@@ -1,6 +1,6 @@
 import json
 from midscene_ui_agent.infrastructure.persistence.checkpoint import JsonCheckpoint
-from midscene_ui_agent.application.workflows.graph import DurableWorkflow
+from midscene_ui_agent.infrastructure.persistence.checkpoint import DurableWorkflow
 
 def test_json_checkpoint_roundtrip(tmp_path):
     saver=JsonCheckpoint(tmp_path/"checkpoint.json"); saver.put("r1", {"status":"paused"}); assert saver.get("r1")["status"]=="paused"

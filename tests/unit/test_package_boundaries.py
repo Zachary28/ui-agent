@@ -14,16 +14,22 @@ def test_domain_does_not_import_platform_or_infrastructure_modules():
     assert not any(any(word in (getattr(node, 'module', '') or '') for word in forbidden) for node in imports)
 
 
-def test_legacy_adapter_facades_preserve_canonical_identity():
-    from midscene_ui_agent.adapters.android import AndroidAdapter as LegacyAndroid
-    from midscene_ui_agent.platforms.android.android import AndroidAdapter
-    from midscene_ui_agent.adapters.browser import BrowserAdapter as LegacyBrowser
-    from midscene_ui_agent.platforms.browser.browser import BrowserAdapter
-    from midscene_ui_agent.adapters.base import PlatformAdapter as LegacyBase
-    from midscene_ui_agent.platforms.base import PlatformAdapter
-    assert LegacyAndroid is AndroidAdapter
-    assert LegacyBrowser is BrowserAdapter
-    assert LegacyBase is PlatformAdapter
+def test_legacy_runtime_namespaces_are_removed():
+    import importlib.util
+
+    assert importlib.util.find_spec("midscene_ui_agent.adapters") is None
+    assert importlib.util.find_spec("midscene_ui_agent.application.workflows.graph") is None
+    assert importlib.util.find_spec("midscene_ui_agent.application.loop.controller") is None
+    assert importlib.util.find_spec("midscene_ui_agent.infrastructure.persistence.loop_checkpoint") is None
+    assert importlib.util.find_spec("midscene_ui_agent.domain.policies.safety") is None
+
+
+def test_runtime_imports_only_canonical_graph_and_platform_modules():
+    from midscene_ui_agent.application.graphs.automation import build_automation_graph
+    from midscene_ui_agent.platforms.android import AndroidAdapter
+
+    assert build_automation_graph is not None
+    assert AndroidAdapter is not None
 
 
 def test_cli_import_and_dependency_check_smoke():

@@ -1,4 +1,4 @@
-from midscene_ui_agent.adapters.registry import default_registry
+from midscene_ui_agent.platforms.registry import default_registry
 
 def test_registered_adapters_expose_unified_operation_protocol():
     required=('connect','health_check','screenshot','launch','execute','verify','tap_locate','report','disconnect','close')

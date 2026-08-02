@@ -1,6 +1,3 @@
-import pytest
-
-
 def test_exit_policy_reports_runtime_and_no_progress():
     from midscene_ui_agent.domain.policies.exit import ExitPolicy
     from midscene_ui_agent.domain.runtime.loop import RuntimeState
@@ -18,13 +15,3 @@ def test_exit_policy_handles_limits_and_cancel():
     assert ExitPolicy().evaluate(state, max_runtime_seconds=10, max_switches=3).reason == "max_switches"
     state.cancelled = True
     assert ExitPolicy().evaluate(state, max_runtime_seconds=10).reason == "cancelled"
-
-
-def test_checkpoint_rejects_fingerprint_mismatch_without_secrets(tmp_path):
-    from midscene_ui_agent.infrastructure.persistence.loop_checkpoint import LoopCheckpoint
-    from midscene_ui_agent.domain.runtime.loop import RuntimeState
-    cp = LoopCheckpoint(tmp_path / "checkpoint.json")
-    cp.save(RuntimeState(), fingerprints={"loop_plan_hash": "a"})
-    with pytest.raises(ValueError, match="RESUME_INVALID"):
-        cp.restore(fingerprints={"loop_plan_hash": "b"})
-    assert "must-not-be-written" not in (tmp_path / "checkpoint.json").read_text()

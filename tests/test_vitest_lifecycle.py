@@ -1,4 +1,4 @@
-from midscene_ui_agent.adapters.vitest_e2e import VitestE2EAdapter
+from midscene_ui_agent.platforms.vitest_e2e import VitestE2EAdapter
 
 def test_vitest_init_creates_context_files(tmp_path):
     adapter=VitestE2EAdapter(); files=adapter.init(str(tmp_path),"web",ai_action_context="UI expert")

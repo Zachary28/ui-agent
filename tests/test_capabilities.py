@@ -1,4 +1,4 @@
-from midscene_ui_agent.adapters.registry import default_registry
+from midscene_ui_agent.platforms.registry import default_registry
 from midscene_ui_agent.domain.contracts import AutomationRequest
 
 def test_all_platforms_build_required_core_commands():

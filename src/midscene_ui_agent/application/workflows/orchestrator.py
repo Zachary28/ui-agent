@@ -11,7 +11,7 @@ from ...platforms.registry import default_registry
 from ...infrastructure.reporting.reports import write_result, build_manifest
 from ...infrastructure.evidence.events import Event
 from ...infrastructure.persistence.checkpoint import SqliteCheckpoint
-from ..loop.controller import LoopWorkflow
+from ..services.loop_runtime import LoopRuntime
 from ..graphs.automation import build_automation_graph
 from ..graphs.single_operation import build_single_operation_graph
 from ..nodes.execution import execute_operation_step
@@ -126,7 +126,7 @@ def run(
     adapter=(adapters or default_registry())[request.platform]; command_runner=runner or CommandRunner(Path(request.report_dir)); steps=[]
     loop_workflow = None
     if request.loop is not None:
-        loop_workflow = LoopWorkflow(
+        loop_workflow = LoopRuntime(
             adapter,
             request=request,
             runner=command_runner,

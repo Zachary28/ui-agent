@@ -1,4 +1,4 @@
-"""Compatibility wrapper that executes Loop plans through the LangGraph subgraph."""
+"""Bind platform execution services to the Loop LangGraph subgraph."""
 from __future__ import annotations
 
 import time
@@ -31,7 +31,7 @@ class LoopResult:
     state: dict[str, Any]
 
 
-class LoopWorkflow:
+class LoopRuntime:
     def __init__(
         self,
         adapter,
@@ -204,4 +204,4 @@ class LoopWorkflow:
         return [ref] if ref else []
 
 
-__all__ = ["LoopResult", "LoopWorkflow"]
+__all__ = ["LoopResult", "LoopRuntime"]
