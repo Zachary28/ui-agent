@@ -1,5 +1,7 @@
 schema_version: 1
 profile: android.bilibili
+goal:
+  prompt: Play short videos and scroll to the next item at the configured interval
 loop:
   operations:
     scroll_feed: {enabled: true, interval_seconds: 15, scroll_limit: 100}

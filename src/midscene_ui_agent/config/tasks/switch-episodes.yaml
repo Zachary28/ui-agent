@@ -1,5 +1,8 @@
 schema_version: 1
 profile: android.tencent-video
+goal:
+  prompt: Play videos and switch to the next free episode at the configured interval
+  require_free: true
 loop:
   operations:
     switch_episode: {enabled: true, interval_seconds: 120, strategy: free_only}

@@ -29,3 +29,6 @@ markers = ["integration: opt-in Web/Android integration tests"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+midscene_ui_agent = ["config/**/*.yaml", "config/**/*.json"]

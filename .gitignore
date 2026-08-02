@@ -5,6 +5,7 @@ __pycache__/
 .venv/
 .worktrees/
 dist/
+build/
 *.egg
 
 # IDE

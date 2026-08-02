@@ -8,5 +8,5 @@ app:
   launch_uri: tv.danmaku.bili
 ui:
   free_markers: [免费观看, 免费]
-  popup_prompts: [关闭普通弹窗，不要登录、购买或提交数据]
+  popup_prompts: [关闭普通信息弹窗]
   ad_prompts: [点击跳过广告或关闭广告]

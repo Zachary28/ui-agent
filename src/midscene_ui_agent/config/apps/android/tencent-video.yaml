@@ -8,6 +8,6 @@ app:
   launch_uri: com.tencent.qqlive
 ui:
   free_markers: [免费, 限免, 免费观看]
-  popup_prompts: [关闭普通弹窗，不要登录、购买或提交数据]
+  popup_prompts: [关闭普通信息弹窗]
   ad_prompts: [点击跳过广告或关闭广告]
   playback_markers: [视频正在播放, 播放进度]

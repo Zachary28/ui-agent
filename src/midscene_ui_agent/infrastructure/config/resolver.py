@@ -10,20 +10,60 @@ from typing import Any
 import yaml
 
 
+def parse_overrides(items: list[str]) -> dict[str, Any]:
+    """Parse repeatable dotted key=value overrides into a nested mapping."""
+    result: dict[str, Any] = {}
+    for item in items:
+        if "=" not in item:
+            raise ValueError(f"override must be key=value: {item}")
+        path, raw = item.split("=", 1)
+        parts = path.split(".")
+        if not path or any(not part for part in parts):
+            raise ValueError(f"override path is invalid: {path}")
+        try:
+            value = json.loads(raw)
+        except json.JSONDecodeError:
+            value = raw
+        cursor = result
+        for part in parts[:-1]:
+            existing = cursor.setdefault(part, {})
+            if not isinstance(existing, dict):
+                raise ValueError(f"override path conflicts at {part}")
+            cursor = existing
+        cursor[parts[-1]] = value
+    return result
+
+
 class ConfigResolver:
     """Resolve defaults, platform, profile, task and runtime overrides."""
 
     def __init__(self, root: str | Path):
         self.root = Path(root).resolve()
 
-    def resolve(self, *, platform: str, app: str, task: str, overrides: dict[str, Any] | None = None) -> dict[str, Any]:
+    def resolve(self, *, platform: str, app: str, task: str,
+                environment: str | None = None,
+                overrides: dict[str, Any] | None = None) -> dict[str, Any]:
         result = self._load_required(self.root / "defaults.yaml")
         result = self._merge(result, self._load_required(self.root / "platforms" / f"{platform}.yaml"))
         result = self._merge(result, self._load_profile(app))
         result = self._merge(result, self._load_required(self.root / "tasks" / f"{task}.yaml"))
+        if environment:
+            result = self._merge(result, self._load_required(self.root / "environments" / f"{environment}.yaml"))
         if overrides:
+            self._validate_override_paths(result, overrides)
             result = self._merge(result, copy.deepcopy(overrides))
         return result
+
+    @classmethod
+    def _validate_override_paths(cls, base: dict[str, Any], override: dict[str, Any], prefix: str = "") -> None:
+        for key, value in override.items():
+            path = f"{prefix}.{key}" if prefix else key
+            if key not in base:
+                raise ValueError(f"unknown override path: {path}")
+            if isinstance(value, dict):
+                if not isinstance(base[key], dict):
+                    raise ValueError(f"override path is not a mapping: {path}")
+                cls._validate_override_paths(base[key], value, path)
 
     def _load_profile(self, profile: str) -> dict[str, Any]:
         path = self.root / "apps" / f"{profile}.yaml"
@@ -80,14 +120,17 @@ class ConfigResolver:
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     @classmethod
-    def fingerprints(cls, resolved: dict[str, Any], *, profile: str | None = None, skill_lock_hash: str | None = None) -> dict[str, str]:
+    def fingerprints(cls, resolved: dict[str, Any], *, profile: str | None = None,
+                     skill_lock_hash: str | None = None,
+                     target: dict[str, Any] | None = None) -> dict[str, str]:
         loop = resolved.get("loop", {})
         return {
             "config_hash": cls.canonical_hash(resolved),
             "profile_hash": cls.canonical_hash({"profile": profile, "app": resolved.get("app", {})}),
             "loop_plan_hash": cls.canonical_hash(loop),
-            "skill_lock_hash": skill_lock_hash or "",
+            "skill_lock_hash": skill_lock_hash or cls.canonical_hash({"skill_lock": None}),
+            "target_fingerprint": cls.canonical_hash(target or {}),
         }
 
 
-__all__ = ["ConfigResolver"]
+__all__ = ["ConfigResolver", "parse_overrides"]

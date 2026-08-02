@@ -1,6 +1,7 @@
 schema_version: 1
 profile: android.tencent-video
 goal:
+  prompt: Open a free television series and start playback
   category: television_series
   require_free: true
 loop:
