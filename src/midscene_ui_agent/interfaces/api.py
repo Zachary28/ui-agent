@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 from ..application.workflows.orchestrator import run as run_workflow
-from ..domain.contracts import AutomationRequest, AutomationResult
+from ..domain.contracts import AutomationRequest, AutomationResult, RunFingerprints
 from ..infrastructure.execution.runner import CommandRunner
 
 
@@ -33,8 +33,15 @@ def run(
     runner: CommandRunner | None = None,
     adapters=None,
     resume: bool = False,
+    fingerprints: RunFingerprints | None = None,
 ) -> AutomationResult:
     _load_environment()
-    return run_workflow(request, runner=runner, adapters=adapters, resume=resume)
+    return run_workflow(
+        request,
+        runner=runner,
+        adapters=adapters,
+        resume=resume,
+        fingerprints=fingerprints,
+    )
 
 __all__ = ["run"]

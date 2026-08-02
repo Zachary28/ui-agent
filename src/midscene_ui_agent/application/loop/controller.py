@@ -69,7 +69,7 @@ class LoopWorkflow:
         )
         return self.result_from_state(state)
 
-    def build_graph(self, *, artifact_root: str | Path):
+    def build_graph(self, *, artifact_root: str | Path, inherit_checkpointer: bool = False):
         self._artifact_root = Path(artifact_root)
         self._artifact_root.mkdir(parents=True, exist_ok=True)
         return build_loop_graph(
@@ -78,8 +78,10 @@ class LoopWorkflow:
                 wait=self._wait,
                 observe=self._observe,
                 execute=self._execute,
+                verify_effect=self._verify_effect,
             ),
             checkpointer=self.checkpointer,
+            inherit_checkpointer=inherit_checkpointer,
         )
 
     @staticmethod
@@ -162,6 +164,14 @@ class LoopWorkflow:
             "artifacts": outcome.artifacts,
             "metadata": outcome.metadata,
         }
+
+    def _verify_effect(self, operation: str, operation_id: str, state) -> bool:
+        del state
+        if self.request is None or not hasattr(self.adapter, "verify_effect"):
+            return False
+        config = self.request.loop.operations.get(operation) if self.request.loop else None
+        timeout = config.timeout_seconds if config and config.timeout_seconds else self.request.timeout_seconds
+        return bool(self.adapter.verify_effect(operation, operation_id, self._context(operation, timeout)))
 
 
 __all__ = ["LoopResult", "LoopWorkflow"]

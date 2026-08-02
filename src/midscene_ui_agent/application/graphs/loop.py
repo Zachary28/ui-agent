@@ -9,6 +9,7 @@ from langgraph.graph import END, START, StateGraph
 
 from ...domain.contracts import ExitReason, LoopPlan
 from ...domain.policies.exit import ExitPolicy
+from ...domain.policies.resume import IDEMPOTENT_OPERATIONS, resume_action
 from ...domain.policies.retry import RetryPolicy
 from ...domain.runtime.graph import JsonObject, LoopGraphState
 from ...domain.runtime.loop import RuntimeState
@@ -23,6 +24,7 @@ class LoopGraphServices:
     wait: Callable[[float], None]
     observe: Callable[[LoopGraphState], Mapping[str, Any]]
     execute: Callable[[str, float, int, LoopGraphState], Mapping[str, Any]]
+    verify_effect: Callable[[str, str, LoopGraphState], bool] | None = None
     record_evidence: Callable[[str, Mapping[str, Any], LoopGraphState], list[str]] | None = None
 
 
@@ -45,7 +47,14 @@ def _runtime_state(state: LoopGraphState, plan: LoopPlan) -> RuntimeState:
     )
 
 
-def build_loop_graph(*, services: LoopGraphServices, checkpointer: CheckpointerHandle | None = None):
+def build_loop_graph(
+    *,
+    services: LoopGraphServices,
+    checkpointer: CheckpointerHandle | None = None,
+    inherit_checkpointer: bool = False,
+):
+    if checkpointer is not None and inherit_checkpointer:
+        raise ValueError("checkpointer and inherit_checkpointer cannot both be supplied")
     retry_policy = RetryPolicy()
     selector = OperationSelector()
 
@@ -130,7 +139,18 @@ def build_loop_graph(*, services: LoopGraphServices, checkpointer: CheckpointerH
         config = plan.operations[operation]
         attempt = int(state.get("selected_attempt", 0)) + 1
         timeout = float(config.timeout_seconds or plan.defaults.timeout_seconds)
-        outcome: JsonObject = dict(services.execute(operation, timeout, attempt, state))
+        effect_verified = False
+        operation_id = str(state.get("operation_id", ""))
+        if services.verify_effect is not None and operation not in IDEMPOTENT_OPERATIONS:
+            effect_verified = services.verify_effect(operation, operation_id, state)
+        if resume_action(operation, effect_verified) == "complete":
+            outcome: JsonObject = {
+                "succeeded": True,
+                "message": "effect already verified",
+                "metadata": {"effect_verified": True},
+            }
+        else:
+            outcome = dict(services.execute(operation, timeout, attempt, state))
         attempts = dict(state.get("operation_attempts", {}))
         attempts[operation] = attempts.get(operation, 0) + 1
         messages = dict(state.get("operation_messages", {}))
@@ -285,7 +305,7 @@ def build_loop_graph(*, services: LoopGraphServices, checkpointer: CheckpointerH
         {"continue": "observe_ui", "retry": "execute_operation", "exit": "summarize_loop"},
     )
     builder.add_edge("summarize_loop", END)
-    saver = checkpointer.saver if checkpointer is not None else None
+    saver = True if inherit_checkpointer else checkpointer.saver if checkpointer is not None else None
     return builder.compile(checkpointer=saver)
 
 

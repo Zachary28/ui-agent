@@ -24,7 +24,10 @@ def build_single_operation_graph(
     *,
     executor: StepExecutor,
     checkpointer: CheckpointerHandle | None = None,
+    inherit_checkpointer: bool = False,
 ):
+    if checkpointer is not None and inherit_checkpointer:
+        raise ValueError("checkpointer and inherit_checkpointer cannot both be supplied")
     def prepare(state: AutomationGraphState) -> dict[str, Any]:
         request = state.get("request", {})
         operation = str(request.get("operation", "run"))
@@ -92,7 +95,7 @@ def build_single_operation_graph(
         "execute_step", route, {"execute": "execute_step", "finish": "finish_operation"}
     )
     builder.add_edge("finish_operation", END)
-    saver = checkpointer.saver if checkpointer is not None else None
+    saver = True if inherit_checkpointer else checkpointer.saver if checkpointer is not None else None
     return builder.compile(checkpointer=saver)
 
 
